@@ -1,0 +1,119 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: config-server
+  labels:
+    app: config-server
+spec:
+  selector:
+    matchLabels:
+      app: config-server
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: discovery-server
+  labels:
+    app: discovery-server
+spec:
+  selector:
+    matchLabels:
+      app: discovery-server
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: admin-server
+  labels:
+    app: admin-server
+spec:
+  selector:
+    matchLabels:
+      app: admin-server
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: api-gateway
+  labels:
+    app: api-gateway
+spec:
+  selector:
+    matchLabels:
+      app: api-gateway
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: customers-service
+  labels:
+    app: customers-service
+spec:
+  selector:
+    matchLabels:
+      app: customers-service
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: vets-service
+  labels:
+    app: vets-service
+spec:
+  selector:
+    matchLabels:
+      app: vets-service
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: visits-service
+  labels:
+    app: visits-service
+spec:
+  selector:
+    matchLabels:
+      app: visits-service
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: genai-service
+  labels:
+    app: genai-service
+spec:
+  selector:
+    matchLabels:
+      app: genai-service
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 30s

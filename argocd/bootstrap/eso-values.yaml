@@ -1,0 +1,32 @@
+serviceAccount:
+  create: true
+  name: external-secrets
+  annotations:
+    # Fill in the ESO role ARN from: terraform -chdir=terraform/environments/dev output eso_role_arn
+    eks.amazonaws.com/role-arn: "arn:aws:iam::ACCOUNT:role/petclinic-ENVIRONMENT-eso-role"
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "50m"
+  limits:
+    memory: "256Mi"
+    cpu: "200m"
+
+webhook:
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "100m"
+
+certController:
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "100m"

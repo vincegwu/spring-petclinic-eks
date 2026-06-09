@@ -1,0 +1,4 @@
+# Dev: all services run with 1 replica to minimise cost
+- op: replace
+  path: /spec/replicas
+  value: 1

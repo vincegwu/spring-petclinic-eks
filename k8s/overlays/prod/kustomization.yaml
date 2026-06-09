@@ -1,0 +1,58 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: petclinic-prod
+
+resources:
+  - ../../base
+  - namespace.yaml
+  - external-secrets/customers-service.yaml
+  - external-secrets/vets-service.yaml
+  - external-secrets/visits-service.yaml
+  - external-secrets/genai-service.yaml
+
+patches:
+  - path: patches/replicas.yaml
+    target:
+      kind: Deployment
+  - path: patches/zipkin-replicas.yaml
+    target:
+      kind: Deployment
+      name: zipkin
+  - path: patches/resources.yaml
+    target:
+      kind: Deployment
+  - path: patches/tracing-sampling.yaml
+    target:
+      kind: ConfigMap
+      name: tracing-config
+
+# Image tags are updated automatically by the CI workflow (replaced with prod-<git-sha>).
+# PLACEHOLDER-update-via-ci tags must never be deployed; CI overwrites them on every push.
+images:
+  - name: config-server
+    newName: ACCOUNT.dkr.ecr.REGION.amazonaws.com/spring-petclinic/config-server
+    newTag: PLACEHOLDER-update-via-ci
+  - name: discovery-server
+    newName: ACCOUNT.dkr.ecr.REGION.amazonaws.com/spring-petclinic/discovery-server
+    newTag: PLACEHOLDER-update-via-ci
+  - name: admin-server
+    newName: ACCOUNT.dkr.ecr.REGION.amazonaws.com/spring-petclinic/admin-server
+    newTag: PLACEHOLDER-update-via-ci
+  - name: api-gateway
+    newName: ACCOUNT.dkr.ecr.REGION.amazonaws.com/spring-petclinic/api-gateway
+    newTag: PLACEHOLDER-update-via-ci
+  - name: customers-service
+    newName: ACCOUNT.dkr.ecr.REGION.amazonaws.com/spring-petclinic/customers-service
+    newTag: PLACEHOLDER-update-via-ci
+  - name: vets-service
+    newName: ACCOUNT.dkr.ecr.REGION.amazonaws.com/spring-petclinic/vets-service
+    newTag: PLACEHOLDER-update-via-ci
+  - name: visits-service
+    newName: ACCOUNT.dkr.ecr.REGION.amazonaws.com/spring-petclinic/visits-service
+    newTag: PLACEHOLDER-update-via-ci
+  - name: genai-service
+    newName: ACCOUNT.dkr.ecr.REGION.amazonaws.com/spring-petclinic/genai-service
+    newTag: PLACEHOLDER-update-via-ci
+  - name: openzipkin/zipkin
+    newTag: "3.4"

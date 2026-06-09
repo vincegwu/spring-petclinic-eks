@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tracing-config
+data:
+  # Overridden per overlay: dev=1.0 (100%), prod=0.1 (10%)
+  sampling.probability: "1.0"
