@@ -79,14 +79,15 @@ A push to either branch triggers the full CI/CD pipeline automatically. Pull req
 
 ### Terraform (`terraform/`)
 
-| Module | Resources provisioned |
+| Module / config | Resources provisioned |
 |---|---|
+| `bootstrap/` | S3 state bucket, DynamoDB lock table, GitHub Actions OIDC provider, `github-actions-dev` + `github-actions-prod` IAM roles — **run once manually before anything else** |
 | `modules/vpc` | VPC (10.0/10.1.0.0/16), 3 public + 3 private subnets across AZs, Internet Gateway, route tables (no NAT — nodes are in public subnets; private subnets are RDS-only with no egress) |
 | `modules/eks` | EKS cluster (Kubernetes 1.31), managed node group (in public subnets for IGW-based NodePort access), OIDC provider, IRSA roles for External Secrets Operator and EBS CSI driver, CoreDNS / kube-proxy / VPC CNI / EBS CSI add-ons |
 | `modules/ecr` | 8 ECR repositories under `spring-petclinic/<service>`, lifecycle policy (30 tagged / expire untagged after 7 days), push permissions for GitHub Actions |
 | `modules/rds` | RDS MySQL 8.0 per data service — random 24-char password, Secrets Manager secret, private subnet group, security group (port 3306 from EKS nodes only), Multi-AZ and deletion protection enabled in prod |
 
-Environment configurations (`environments/dev`, `environments/prod`) wire the modules together and create a GitHub Actions OIDC trust role scoped to the respective branch.
+Environment configurations (`environments/dev`, `environments/prod`) wire the modules together. The GitHub Actions OIDC provider and trust roles are created by `terraform/bootstrap` (run once manually) so that CI can authenticate before any environment Terraform has run.
 
 | Setting | Dev | Prod |
 |---|---|---|
@@ -158,7 +159,7 @@ Triggers on push or PR to `dev`/`main` (when `terraform/**` changes).
 - **Pull request** → `terraform plan`, output posted as a PR comment
 - **Push** → `terraform apply`
 
-Each environment (`dev`/`main`) runs independently in a matrix so a change to the dev environment does not affect prod.
+A `filter` job runs first to select only the environment matching the triggering branch (dev → dev, main → prod), then passes a single-entry matrix to the `terraform` job. This avoids the GitHub Actions limitation where `matrix` context is unavailable in job-level `if` conditions, and ensures a push to `dev` never touches prod state.
 
 ### `.github/workflows/pr-checks.yml` — PR Validation
 
@@ -185,7 +186,7 @@ spring-petclinic-eks/
 │   └── docker/Dockerfile              # Shared multi-stage Docker build
 │
 ├── terraform/
-│   ├── bootstrap/                     # One-time: creates S3 state bucket + DynamoDB lock table
+│   ├── bootstrap/                     # One-time: S3 state bucket + DynamoDB lock table + GitHub Actions OIDC + IAM roles
 │   ├── modules/
 │   │   ├── vpc/                       # VPC, subnets, NAT
 │   │   ├── eks/                       # EKS cluster, node group, IRSA roles
@@ -253,10 +254,10 @@ High-level sequence:
    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
    helm repo update
    ```
-3. **Fill in `terraform.tfvars`** — set `github_org`, `github_repo`, and `github_repo_url` in both environment files
-4. **`terraform apply` in `terraform/bootstrap/`** — creates S3 bucket and DynamoDB table for remote state (one-time)
+3. **Fill in `terraform.tfvars`** — set `github_repo_url` in both environment files (`github_org` and `github_repo` are now passed to bootstrap, not the environments)
+4. **`terraform apply` in `terraform/bootstrap/`** — creates S3 bucket, DynamoDB lock table, the GitHub Actions OIDC provider, and the `github-actions-dev` / `github-actions-prod` IAM roles (one-time, with your local AWS credentials). Note the two role ARN outputs.
 5. **`terraform apply` in `terraform/environments/dev/`** — provisions VPC, EKS, ECR, four RDS instances, installs ESO, ArgoCD, and registers the ArgoCD Application, all in a single apply
-6. **Add six GitHub secrets** — `AWS_ROLE_ARN_DEV`, `AWS_ROLE_ARN_PROD`, `AZURE_OPENAI_KEY`, `AZURE_OPENAI_ENDPOINT`, `GH_PAT`, `GRAFANA_ADMIN_PASSWORD`
+6. **Add six GitHub secrets** — `AWS_ROLE_ARN_DEV` and `AWS_ROLE_ARN_PROD` come from the bootstrap outputs; also add `AZURE_OPENAI_KEY`, `AZURE_OPENAI_ENDPOINT`, `GH_PAT`, `GRAFANA_ADMIN_PASSWORD`
 7. **`terraform apply` in `terraform/environments/prod/`** — same as dev for the prod cluster
 8. **Update ECR registry placeholders** in `k8s/overlays/*/kustomization.yaml` with the value from `terraform output ecr_registry`, then commit
 9. **Push to `dev`** — GitHub Actions builds all services, pushes images, updates image tags; ArgoCD syncs automatically

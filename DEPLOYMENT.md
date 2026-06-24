@@ -15,7 +15,7 @@ Running `terraform apply` across the two stages below provisions and configures 
 | IRSA role for EBS CSI driver (`AmazonEBSCSIDriverPolicy`) | `module.eks` |
 | ECR repositories (8 services) | `module.ecr` |
 | RDS MySQL instance per data service | `module.rds_*` |
-| GitHub Actions OIDC trust role | `aws_iam_role.github_actions` |
+| GitHub Actions OIDC provider + trust roles (dev & prod) | `terraform/bootstrap` (one-time) |
 | Azure OpenAI credentials in Secrets Manager | `aws_secretsmanager_secret_version.azure_openai` |
 | External Secrets Operator | `helm_release.external_secrets` |
 | ClusterSecretStore → Secrets Manager | `kubernetes_manifest.cluster_secret_store` |
@@ -65,32 +65,41 @@ helm repo update
 
 ## Step 3 — Configure `terraform.tfvars`
 
-Edit both files with your GitHub details:
+Edit both environment files with your repository URL (the only value that varies per environment):
 
 ```
 terraform/environments/dev/terraform.tfvars
 terraform/environments/prod/terraform.tfvars
 ```
 
-Replace the three placeholder values:
-
 ```hcl
-github_org      = "your-github-username-or-org"
-github_repo     = "spring-petclinic-eks"
 github_repo_url = "https://github.com/your-github-username-or-org/spring-petclinic-eks.git"
 ```
 
+`github_org` and `github_repo` are no longer needed in the environment `tfvars` — they are consumed by the bootstrap step below.
+
 ---
 
-## Step 4 — Bootstrap Terraform remote state
+## Step 4 — Bootstrap Terraform remote state + OIDC
 
-This creates the S3 bucket and DynamoDB table that all subsequent `terraform apply` runs use for state storage. Run once:
+This creates the S3 bucket and DynamoDB table for remote state, and — critically — the GitHub Actions OIDC provider and IAM trust roles. It runs once with your local AWS credentials (the only time static credentials are needed):
 
 ```
 cd terraform/bootstrap
 terraform init
-terraform apply
+terraform apply \
+  -var="github_org=your-github-username-or-org" \
+  -var="github_repo=spring-petclinic-eks"
 ```
+
+Note the two role ARN outputs — you will need them in Step 6:
+
+```
+terraform output github_actions_role_arn_dev
+terraform output github_actions_role_arn_prod
+```
+
+> **Why bootstrap owns OIDC:** GitHub Actions authenticates to AWS via OIDC before it can run Terraform. If the OIDC provider and IAM roles were inside the environment configs, nothing could go first — a classic chicken-and-egg. Bootstrap runs once with local credentials to break the cycle.
 
 ---
 
@@ -108,10 +117,9 @@ Terraform runs in two internal stages automatically (see `terraform.yml` for how
 
 The full apply takes 20–30 minutes (EKS cluster creation dominates).
 
-At the end, note the outputs:
+At the end, note the ECR registry output (used in Step 8):
 
 ```
-terraform output github_actions_role_arn
 terraform output ecr_registry
 ```
 
@@ -123,8 +131,8 @@ In your repository → **Settings → Secrets and variables → Actions**, add t
 
 | Secret name | Value |
 |---|---|
-| `AWS_ROLE_ARN_DEV` | Output of `terraform output github_actions_role_arn` from the dev environment |
-| `AWS_ROLE_ARN_PROD` | Output of the same command from the prod environment (after Step 5) |
+| `AWS_ROLE_ARN_DEV` | `terraform output github_actions_role_arn_dev` from `terraform/bootstrap` (Step 4) |
+| `AWS_ROLE_ARN_PROD` | `terraform output github_actions_role_arn_prod` from `terraform/bootstrap` (Step 4) |
 | `AZURE_OPENAI_KEY` | Your Azure OpenAI API key (from the Azure Portal → your resource → Keys and Endpoint) |
 | `AZURE_OPENAI_ENDPOINT` | Your Azure OpenAI endpoint URL (e.g. `https://<resource-name>.openai.azure.com/`) |
 | `GH_PAT` | A GitHub Personal Access Token with `repo` write scope — needed for CI to commit updated image tags back to the branch |
@@ -198,6 +206,8 @@ Revert the kustomization commit on the relevant branch and push. ArgoCD will syn
 Any change to files under `terraform/` triggers the `terraform.yml` workflow automatically:
 - **Pull requests** → plan output is posted as a PR comment
 - **Merge to `dev` or `main`** → apply runs in two stages
+
+The workflow uses a `filter` job to select only the environment that matches the triggering branch (dev → dev environment, main → prod environment), so a push to `dev` never touches the prod state.
 
 The `azure_openai_key` is read from the `AZURE_OPENAI_KEY` GitHub secret at apply time and is never written to the state file in plaintext (it is stored as a `sensitive` variable and encrypted in Secrets Manager alongside the endpoint URL).
 

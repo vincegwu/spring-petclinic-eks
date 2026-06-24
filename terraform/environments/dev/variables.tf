@@ -38,16 +38,6 @@ variable "rds_instance_class" {
   default = "db.t3.micro"
 }
 
-variable "github_org" {
-  description = "GitHub organisation or username"
-  type        = string
-}
-
-variable "github_repo" {
-  description = "GitHub repository name (without org prefix)"
-  type        = string
-}
-
 variable "github_repo_url" {
   description = "Full HTTPS URL of the GitHub repository — used by ArgoCD to poll for changes"
   type        = string

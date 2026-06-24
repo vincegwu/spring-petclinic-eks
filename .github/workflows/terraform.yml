@@ -105,9 +105,6 @@ jobs:
             -target=module.rds_vets \
             -target=module.rds_visits \
             -target=module.rds_genai \
-            -target=aws_iam_openid_connect_provider.github \
-            -target=aws_iam_role.github_actions \
-            -target=aws_iam_role_policy.github_actions_ecr \
             -target=aws_secretsmanager_secret.azure_openai \
             -target=aws_secretsmanager_secret_version.azure_openai \
             -input=false -no-color -out=tfplan 2>&1 | tee plan.txt
@@ -150,9 +147,6 @@ jobs:
             -target=module.rds_vets \
             -target=module.rds_visits \
             -target=module.rds_genai \
-            -target=aws_iam_openid_connect_provider.github \
-            -target=aws_iam_role.github_actions \
-            -target=aws_iam_role_policy.github_actions_ecr \
             -target=aws_secretsmanager_secret.azure_openai \
             -target=aws_secretsmanager_secret_version.azure_openai \
             -input=false -auto-approve

@@ -74,5 +74,99 @@ resource "aws_dynamodb_table" "locks" {
   tags = { ManagedBy = "terraform-bootstrap" }
 }
 
-output "state_bucket" { value = aws_s3_bucket.state.bucket }
-output "lock_table"   { value = aws_dynamodb_table.locks.name }
+variable "github_org" {
+  description = "GitHub organisation or username"
+  type        = string
+}
+
+variable "github_repo" {
+  description = "GitHub repository name (without org prefix)"
+  type        = string
+}
+
+# ── GitHub Actions OIDC — created once here so CI can authenticate ────────────
+resource "aws_iam_openid_connect_provider" "github" {
+  url             = "https://token.actions.githubusercontent.com"
+  client_id_list  = ["sts.amazonaws.com"]
+  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
+  tags            = { ManagedBy = "terraform-bootstrap" }
+}
+
+resource "aws_iam_role" "github_actions_dev" {
+  name = "github-actions-dev"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
+      Action    = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringLike = {
+          "token.actions.githubusercontent.com:sub" = "repo:${var.github_org}/${var.github_repo}:ref:refs/heads/dev"
+        }
+        StringEquals = {
+          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+        }
+      }
+    }]
+  })
+
+  tags = { ManagedBy = "terraform-bootstrap" }
+}
+
+resource "aws_iam_role_policy" "github_actions_ecr_dev" {
+  name = "ecr-get-auth-token"
+  role = aws_iam_role.github_actions_dev.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["ecr:GetAuthorizationToken"]
+      Resource = "*"
+    }]
+  })
+}
+
+resource "aws_iam_role" "github_actions_prod" {
+  name = "github-actions-prod"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
+      Action    = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringLike = {
+          "token.actions.githubusercontent.com:sub" = "repo:${var.github_org}/${var.github_repo}:ref:refs/heads/main"
+        }
+        StringEquals = {
+          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+        }
+      }
+    }]
+  })
+
+  tags = { ManagedBy = "terraform-bootstrap" }
+}
+
+resource "aws_iam_role_policy" "github_actions_ecr_prod" {
+  name = "ecr-get-auth-token"
+  role = aws_iam_role.github_actions_prod.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["ecr:GetAuthorizationToken"]
+      Resource = "*"
+    }]
+  })
+}
+
+output "state_bucket"                { value = aws_s3_bucket.state.bucket }
+output "lock_table"                  { value = aws_dynamodb_table.locks.name }
+output "github_actions_role_arn_dev" { value = aws_iam_role.github_actions_dev.arn }
+output "github_actions_role_arn_prod"{ value = aws_iam_role.github_actions_prod.arn }
