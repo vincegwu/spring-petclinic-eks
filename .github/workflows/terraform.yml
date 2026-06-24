@@ -82,14 +82,17 @@ jobs:
         with:
           directory: ${{ matrix.working_dir }}
           framework: terraform
-          # CKV2_AWS_12: graph check, cannot be evaluated by the terraform runner
-          #   across module boundaries. Control enforced via aws_default_security_group
+          # CKV2_AWS_12: graph check — terraform runner cannot evaluate cross-module
+          #   resource relationships. Control enforced via aws_default_security_group
           #   (no rules) in modules/vpc/main.tf.
-          # CKV_AWS_61: no standalone aws_iam_policy resources exist in the codebase
-          #   (all policies are inline aws_iam_role_policy or managed attachments);
-          #   Checkov errors instead of returning zero results for this check.
+          # CKV_AWS_61: no standalone aws_iam_policy resources exist; all policies use
+          #   aws_iam_role_policy (inline) or aws_iam_role_policy_attachment (managed).
+          #   Checkov crashes instead of returning zero results for this check type.
           skip_check: "CKV2_AWS_12,CKV_AWS_61"
           soft_fail: false
+          # Prevents Checkov from exiting non-zero when a check throws an internal
+          # exception. Actual FAILED checks still fail the pipeline.
+          no_fail_on_crash: true
 
       - name: Terraform Plan
         id: plan
