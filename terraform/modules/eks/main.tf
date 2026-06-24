@@ -177,9 +177,9 @@ resource "aws_security_group" "nodes" {
 }
 
 # ── EKS Cluster ──────────────────────────────────────────────────────────────
-#checkov:skip=CKV_AWS_39:Public endpoint required for GitHub Actions CI — disabling needs VPC-based runners
-#checkov:skip=CKV_AWS_38:GitHub Actions runner IPs are dynamic; restrict via OIDC trust instead
 resource "aws_eks_cluster" "this" {
+  #checkov:skip=CKV_AWS_39:Public endpoint required for GitHub Actions CI — disabling needs VPC-based runners
+  #checkov:skip=CKV_AWS_38:GitHub Actions runner IPs are dynamic; restrict via OIDC trust instead
   name     = var.cluster_name
   version  = var.cluster_version
   role_arn = aws_iam_role.cluster.arn
@@ -212,8 +212,8 @@ resource "aws_eks_cluster" "this" {
 # A launch template is required to attach our custom nodes security group —
 # EKS does not merge it with the cluster security group automatically, so both
 # must be listed here for control-plane communication and NodePort ingress to work.
-#checkov:skip=CKV_AWS_88:Nodes require public IPs for IGW-based NodePort access without a load balancer
 resource "aws_launch_template" "nodes" {
+  #checkov:skip=CKV_AWS_88:Nodes require public IPs for IGW-based NodePort access without a load balancer
   name_prefix = "${var.cluster_name}-ng-"
 
   network_interfaces {

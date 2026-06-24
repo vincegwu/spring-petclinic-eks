@@ -14,6 +14,8 @@ data "aws_availability_zones" "available" {
   }
 }
 
+data "aws_caller_identity" "current" {}
+
 locals {
   azs = slice(data.aws_availability_zones.available.names, 0, 3)
 }
@@ -41,9 +43,38 @@ resource "aws_default_security_group" "default" {
 }
 
 # ── VPC Flow Logs ─────────────────────────────────────────────────────────────
+resource "aws_kms_key" "flow_log" {
+  description             = "KMS key for VPC flow log CloudWatch log group"
+  enable_key_rotation     = true
+  deletion_window_in_days = 7
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "EnableRootAccess"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
+        Action    = "kms:*"
+        Resource  = "*"
+      },
+      {
+        Sid       = "AllowCloudWatchLogs"
+        Effect    = "Allow"
+        Principal = { Service = "logs.amazonaws.com" }
+        Action    = ["kms:Encrypt*", "kms:Decrypt*", "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:Describe*"]
+        Resource  = "*"
+      }
+    ]
+  })
+
+  tags = var.tags
+}
+
 resource "aws_cloudwatch_log_group" "flow_log" {
   name              = "/aws/vpc/${var.cluster_name}/flow-logs"
-  retention_in_days = 30
+  retention_in_days = 365
+  kms_key_id        = aws_kms_key.flow_log.arn
   tags              = var.tags
 }
 
@@ -89,8 +120,8 @@ resource "aws_flow_log" "this" {
   tags            = var.tags
 }
 
-#checkov:skip=CKV_AWS_130:map_public_ip_on_launch required — nodes sit in public subnets for IGW-based NodePort access without a load balancer
 resource "aws_subnet" "public" {
+  #checkov:skip=CKV_AWS_130:map_public_ip_on_launch required — nodes sit in public subnets for IGW-based NodePort access without a load balancer
   count = length(local.azs)
 
   vpc_id                  = aws_vpc.this.id

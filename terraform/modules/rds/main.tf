@@ -40,8 +40,8 @@ resource "aws_kms_key" "secrets" {
 }
 
 # ── Secrets Manager ──────────────────────────────────────────────────────────
-#checkov:skip=CKV2_AWS_57:RDS password rotation via Lambda is not configured — IAM auth is enabled as the preferred auth method
 resource "aws_secretsmanager_secret" "db" {
+  #checkov:skip=CKV2_AWS_57:RDS password rotation via Lambda is not configured — IAM auth is enabled as the preferred auth method
   name                    = "petclinic/${var.environment}/${var.service_name}/db"
   description             = "RDS credentials for ${var.service_name} (${var.environment})"
   recovery_window_in_days = var.environment == "prod" ? 7 : 0
@@ -173,6 +173,7 @@ resource "aws_db_instance" "this" {
   copy_tags_to_snapshot     = true
 
   iam_database_authentication_enabled = true
+  ca_cert_identifier                  = "rds-ca-rsa2048-g1"
 
   monitoring_interval = 60
   monitoring_role_arn = aws_iam_role.rds_monitoring.arn
