@@ -2,7 +2,7 @@
 
 A production-ready GitOps deployment of the [Spring PetClinic Microservices](https://github.com/spring-petclinic/spring-petclinic-microservices) application on AWS EKS, using Terraform for infrastructure, GitHub Actions for CI, and ArgoCD for continuous delivery.
 
-The application source lives in `upstream/` (tracked as a git dependency). Everything else in this repository is the deployment infrastructure.
+The application source lives in `upstream/` (tracked as a [git submodule](https://github.com/spring-petclinic/spring-petclinic-microservices)). Everything else in this repository is the deployment infrastructure.
 
 ---
 
@@ -82,7 +82,7 @@ A push to either branch triggers the full CI/CD pipeline automatically. Pull req
 | Module | Resources provisioned |
 |---|---|
 | `modules/vpc` | VPC (10.0/10.1.0.0/16), 3 public + 3 private subnets across AZs, Internet Gateway, route tables (no NAT — nodes are in public subnets; private subnets are RDS-only with no egress) |
-| `modules/eks` | EKS cluster (Kubernetes 1.31), managed node group (in public subnets for IGW-based NodePort access), OIDC provider, IRSA role for External Secrets Operator, CoreDNS / kube-proxy / VPC CNI / EBS CSI add-ons |
+| `modules/eks` | EKS cluster (Kubernetes 1.31), managed node group (in public subnets for IGW-based NodePort access), OIDC provider, IRSA roles for External Secrets Operator and EBS CSI driver, CoreDNS / kube-proxy / VPC CNI / EBS CSI add-ons |
 | `modules/ecr` | 8 ECR repositories under `spring-petclinic/<service>`, lifecycle policy (30 tagged / expire untagged after 7 days), push permissions for GitHub Actions |
 | `modules/rds` | RDS MySQL 8.0 per data service — random 24-char password, Secrets Manager secret, private subnet group, security group (port 3306 from EKS nodes only), Multi-AZ and deletion protection enabled in prod |
 
@@ -230,10 +230,12 @@ spring-petclinic-eks/
 |---|---|---|
 | AWS CLI | v2 | Authentication for the initial Terraform runs |
 | Terraform | >= 1.6 | All infrastructure provisioning (VPC, EKS, ECR, RDS, Helm add-ons, ArgoCD) |
+| Helm | >= 3 | Required locally to prime the Terraform Helm provider's repo cache (`helm repo add` + `helm repo update`) before `terraform apply` |
+| Git | any | Clone with `--recurse-submodules` to initialise `upstream/` |
 | Java | 17 | Local development only |
 | Maven | 3.x (wrapper included) | Local development only |
 
-> **kubectl**, **Helm**, and **kustomize** are not required on your local machine. Terraform installs and configures all Kubernetes add-ons, and the CI workflow handles Kustomize.
+> **kubectl** and **kustomize** are not required on your local machine. Terraform installs and configures all Kubernetes add-ons, and the CI workflow handles Kustomize.
 
 ---
 
@@ -243,13 +245,21 @@ Everything is driven by `terraform apply` and GitHub Actions — no manual kubec
 
 High-level sequence:
 
-1. **Fill in `terraform.tfvars`** — set `github_org`, `github_repo`, and `github_repo_url` in both environment files
-2. **`terraform apply` in `terraform/bootstrap/`** — creates S3 bucket and DynamoDB table for remote state (one-time)
-3. **`terraform apply` in `terraform/environments/dev/`** — provisions VPC, EKS, ECR, four RDS instances, installs ESO, ArgoCD, and registers the ArgoCD Application, all in a single apply
-4. **Add six GitHub secrets** — `AWS_ROLE_ARN_DEV`, `AWS_ROLE_ARN_PROD`, `AZURE_OPENAI_KEY`, `AZURE_OPENAI_ENDPOINT`, `GH_PAT`, `GRAFANA_ADMIN_PASSWORD`
-5. **`terraform apply` in `terraform/environments/prod/`** — same as dev for the prod cluster
-6. **Update ECR registry placeholders** in `k8s/overlays/*/kustomization.yaml` with the value from `terraform output ecr_registry`, then commit
-7. **Push to `dev`** — GitHub Actions builds all services, pushes images, updates image tags; ArgoCD syncs automatically
+1. **Clone with submodules** — `git clone --recurse-submodules <repo-url>` (or `git submodule update --init` after a plain clone)
+2. **Prime the Helm repo cache** — run once on any machine that will execute `terraform apply`:
+   ```bash
+   helm repo add external-secrets https://charts.external-secrets.io
+   helm repo add argo https://argoproj.github.io/argo-helm
+   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+   helm repo update
+   ```
+3. **Fill in `terraform.tfvars`** — set `github_org`, `github_repo`, and `github_repo_url` in both environment files
+4. **`terraform apply` in `terraform/bootstrap/`** — creates S3 bucket and DynamoDB table for remote state (one-time)
+5. **`terraform apply` in `terraform/environments/dev/`** — provisions VPC, EKS, ECR, four RDS instances, installs ESO, ArgoCD, and registers the ArgoCD Application, all in a single apply
+6. **Add six GitHub secrets** — `AWS_ROLE_ARN_DEV`, `AWS_ROLE_ARN_PROD`, `AZURE_OPENAI_KEY`, `AZURE_OPENAI_ENDPOINT`, `GH_PAT`, `GRAFANA_ADMIN_PASSWORD`
+7. **`terraform apply` in `terraform/environments/prod/`** — same as dev for the prod cluster
+8. **Update ECR registry placeholders** in `k8s/overlays/*/kustomization.yaml` with the value from `terraform output ecr_registry`, then commit
+9. **Push to `dev`** — GitHub Actions builds all services, pushes images, updates image tags; ArgoCD syncs automatically
 
 ---
 

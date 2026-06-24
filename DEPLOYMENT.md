@@ -12,6 +12,7 @@ Running `terraform apply` across the two stages below provisions and configures 
 |---|---|
 | VPC, public + private subnets, Internet Gateway | `module.vpc` |
 | EKS cluster + node group | `module.eks` |
+| IRSA role for EBS CSI driver (`AmazonEBSCSIDriverPolicy`) | `module.eks` |
 | ECR repositories (8 services) | `module.ecr` |
 | RDS MySQL instance per data service | `module.rds_*` |
 | GitHub Actions OIDC trust role | `aws_iam_role.github_actions` |
@@ -30,11 +31,39 @@ Install these tools once on your machine:
 
 - [Terraform](https://developer.hashicorp.com/terraform/install) >= 1.6
 - [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) — configured with credentials that have `AdministratorAccess` for the bootstrap and first apply
+- [Helm](https://helm.sh/docs/intro/install/) >= 3 — the Terraform Helm provider uses the local repo cache; repos must be added before `terraform apply`
 - [Git](https://git-scm.com/)
 
 ---
 
-## Step 1 — Configure `terraform.tfvars`
+## Step 1 — Clone with submodules
+
+```
+git clone --recurse-submodules <your-repo-url>
+```
+
+If you already cloned without the flag, initialise `upstream/` with:
+
+```
+git submodule update --init
+```
+
+---
+
+## Step 2 — Prime the Helm repo cache
+
+The Terraform Helm provider resolves charts from the local machine's Helm cache. Run this once (and again on any new machine):
+
+```
+helm repo add external-secrets https://charts.external-secrets.io
+helm repo add argo https://argoproj.github.io/argo-helm
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+```
+
+---
+
+## Step 3 — Configure `terraform.tfvars`
 
 Edit both files with your GitHub details:
 
@@ -53,7 +82,7 @@ github_repo_url = "https://github.com/your-github-username-or-org/spring-petclin
 
 ---
 
-## Step 2 — Bootstrap Terraform remote state
+## Step 4 — Bootstrap Terraform remote state
 
 This creates the S3 bucket and DynamoDB table that all subsequent `terraform apply` runs use for state storage. Run once:
 
@@ -65,7 +94,7 @@ terraform apply
 
 ---
 
-## Step 3 — Provision the dev environment
+## Step 5 — Provision the dev environment
 
 ```
 cd terraform/environments/dev
@@ -88,7 +117,7 @@ terraform output ecr_registry
 
 ---
 
-## Step 4 — Add GitHub repository secrets
+## Step 6 — Add GitHub repository secrets
 
 In your repository → **Settings → Secrets and variables → Actions**, add these secrets:
 
@@ -103,7 +132,7 @@ In your repository → **Settings → Secrets and variables → Actions**, add t
 
 ---
 
-## Step 5 — Provision the prod environment
+## Step 7 — Provision the prod environment
 
 ```
 cd terraform/environments/prod
@@ -113,7 +142,7 @@ terraform apply
 
 ---
 
-## Step 6 — Update the ECR registry placeholder in Kustomize overlays
+## Step 8 — Update the ECR registry placeholder in Kustomize overlays
 
 After running Terraform for either environment, replace `ACCOUNT` and `REGION` in both overlay files with the actual ECR registry hostname from `terraform output ecr_registry`:
 
@@ -135,7 +164,7 @@ Commit and push this change to the `dev` branch. After this, all image tag updat
 
 ---
 
-## Step 7 — Trigger the first deployment
+## Step 9 — Trigger the first deployment
 
 Push any change to the `upstream/` directory on the `dev` branch, or simply push the kustomization update from Step 6. The CI workflow will:
 
