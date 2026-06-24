@@ -25,27 +25,34 @@ env:
   TF_VERSION: "1.9.0"
 
 jobs:
+  filter:
+    name: Determine target environment
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - id: set
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            TARGET="${{ github.base_ref }}"
+          else
+            TARGET="${{ github.ref_name }}"
+          fi
+
+          if [[ "$TARGET" == "dev" ]]; then
+            echo 'matrix={"include":[{"environment":"dev","branch":"dev","working_dir":"terraform/environments/dev","aws_role_secret":"AWS_ROLE_ARN_DEV"}]}' >> $GITHUB_OUTPUT
+          elif [[ "$TARGET" == "main" ]]; then
+            echo 'matrix={"include":[{"environment":"prod","branch":"main","working_dir":"terraform/environments/prod","aws_role_secret":"AWS_ROLE_ARN_PROD"}]}' >> $GITHUB_OUTPUT
+          fi
+
   terraform:
     name: Terraform ${{ github.event_name == 'push' && 'Apply' || 'Plan' }} — ${{ matrix.environment }}
     runs-on: ubuntu-latest
+    needs: filter
 
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - environment: dev
-            branch: dev
-            working_dir: terraform/environments/dev
-            aws_role_secret: AWS_ROLE_ARN_DEV
-          - environment: prod
-            branch: main
-            working_dir: terraform/environments/prod
-            aws_role_secret: AWS_ROLE_ARN_PROD
-
-    # Only run for the relevant branch
-    if: |
-      (github.ref_name == matrix.branch) ||
-      (github.event_name == 'pull_request' && github.base_ref == matrix.branch)
+      matrix: ${{ fromJSON(needs.filter.outputs.matrix) }}
 
     steps:
       - name: Checkout
