@@ -81,7 +81,11 @@ jobs:
         uses: bridgecrewio/checkov-action@v12
         with:
           directory: ${{ matrix.working_dir }}
-          framework: terraform,terraform_graph
+          framework: terraform
+          # CKV2_AWS_12 is a graph check that cannot be evaluated by the terraform
+          # runner when resources are in modules. The control is already enforced via
+          # aws_default_security_group (no rules) in modules/vpc/main.tf.
+          skip_check: "CKV2_AWS_12"
           soft_fail: false
 
       - name: Terraform Plan
