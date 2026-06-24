@@ -11,17 +11,41 @@ terraform {
   }
 }
 
+data "aws_caller_identity" "current" {}
+
 resource "random_password" "db" {
   length           = 24
   special          = true
   override_special = "!#$%&*()-_=+[]{}<>:?"
 }
 
+# ── KMS key for Secrets Manager encryption ───────────────────────────────────
+resource "aws_kms_key" "secrets" {
+  description             = "KMS key for ${var.service_name} Secrets Manager secret"
+  enable_key_rotation     = true
+  deletion_window_in_days = var.environment == "prod" ? 30 : 7
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "EnableRootAccess"
+      Effect    = "Allow"
+      Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
+      Action    = "kms:*"
+      Resource  = "*"
+    }]
+  })
+
+  tags = var.tags
+}
+
 # ── Secrets Manager ──────────────────────────────────────────────────────────
+#checkov:skip=CKV2_AWS_57:RDS password rotation via Lambda is not configured — IAM auth is enabled as the preferred auth method
 resource "aws_secretsmanager_secret" "db" {
   name                    = "petclinic/${var.environment}/${var.service_name}/db"
   description             = "RDS credentials for ${var.service_name} (${var.environment})"
   recovery_window_in_days = var.environment == "prod" ? 7 : 0
+  kms_key_id              = aws_kms_key.secrets.arn
   tags                    = var.tags
 }
 
@@ -60,12 +84,7 @@ resource "aws_security_group" "rds" {
     security_groups = var.allowed_security_group_ids
   }
 
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  # No egress rules — RDS does not initiate outbound connections
 
   tags = merge(var.tags, { Name = "${var.environment}-${var.service_name}-rds-sg" })
 }
@@ -91,7 +110,34 @@ resource "aws_db_parameter_group" "this" {
     value = "100"
   }
 
+  parameter {
+    name         = "require_secure_transport"
+    value        = "ON"
+    apply_method = "immediate"
+  }
+
   tags = var.tags
+}
+
+# ── Enhanced monitoring IAM role ─────────────────────────────────────────────
+resource "aws_iam_role" "rds_monitoring" {
+  name = "${var.environment}-${var.service_name}-rds-monitoring"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "monitoring.rds.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+
+  tags = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "rds_monitoring" {
+  role       = aws_iam_role.rds_monitoring.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole"
 }
 
 # ── RDS Instance ─────────────────────────────────────────────────────────────
@@ -120,9 +166,16 @@ resource "aws_db_instance" "this" {
   skip_final_snapshot    = var.environment != "prod"
   final_snapshot_identifier = var.environment == "prod" ? "${var.environment}-${var.service_name}-final" : null
 
-  backup_retention_period = var.environment == "prod" ? 7 : 1
-  backup_window           = "03:00-04:00"
-  maintenance_window      = "Mon:04:00-Mon:05:00"
+  backup_retention_period   = var.environment == "prod" ? 7 : 1
+  backup_window             = "03:00-04:00"
+  maintenance_window        = "Mon:04:00-Mon:05:00"
+  auto_minor_version_upgrade = true
+  copy_tags_to_snapshot     = true
+
+  iam_database_authentication_enabled = true
+
+  monitoring_interval = 60
+  monitoring_role_arn = aws_iam_role.rds_monitoring.arn
 
   enabled_cloudwatch_logs_exports = ["error", "slowquery"]
 

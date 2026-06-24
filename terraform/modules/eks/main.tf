@@ -11,6 +11,30 @@ terraform {
   }
 }
 
+data "aws_caller_identity" "current" {}
+
+# ── KMS key for EKS secrets encryption ──────────────────────────────────────
+resource "aws_kms_key" "eks_secrets" {
+  description             = "KMS key for EKS cluster secrets encryption"
+  enable_key_rotation     = true
+  deletion_window_in_days = 7
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "EnableRootAccess"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
+        Action    = "kms:*"
+        Resource  = "*"
+      },
+    ]
+  })
+
+  tags = var.tags
+}
+
 # ── IAM: Cluster role ────────────────────────────────────────────────────────
 resource "aws_iam_role" "cluster" {
   name = "${var.cluster_name}-cluster-role"
@@ -153,6 +177,8 @@ resource "aws_security_group" "nodes" {
 }
 
 # ── EKS Cluster ──────────────────────────────────────────────────────────────
+#checkov:skip=CKV_AWS_39:Public endpoint required for GitHub Actions CI — disabling needs VPC-based runners
+#checkov:skip=CKV_AWS_38:GitHub Actions runner IPs are dynamic; restrict via OIDC trust instead
 resource "aws_eks_cluster" "this" {
   name     = var.cluster_name
   version  = var.cluster_version
@@ -169,6 +195,15 @@ resource "aws_eks_cluster" "this" {
     authentication_mode = "API_AND_CONFIG_MAP"
   }
 
+  encryption_config {
+    provider {
+      key_arn = aws_kms_key.eks_secrets.arn
+    }
+    resources = ["secrets"]
+  }
+
+  enabled_cluster_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+
   depends_on = [aws_iam_role_policy_attachment.cluster_policy]
   tags       = var.tags
 }
@@ -177,12 +212,19 @@ resource "aws_eks_cluster" "this" {
 # A launch template is required to attach our custom nodes security group —
 # EKS does not merge it with the cluster security group automatically, so both
 # must be listed here for control-plane communication and NodePort ingress to work.
+#checkov:skip=CKV_AWS_88:Nodes require public IPs for IGW-based NodePort access without a load balancer
 resource "aws_launch_template" "nodes" {
   name_prefix = "${var.cluster_name}-ng-"
 
   network_interfaces {
     associate_public_ip_address = true
     security_groups             = [aws_security_group.cluster.id, aws_security_group.nodes.id]
+  }
+
+  metadata_options {
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 1
+    http_endpoint               = "enabled"
   }
 
   tag_specifications {
