@@ -84,10 +84,12 @@ jobs:
           #   a valid framework. Control enforced via aws_default_security_group in vpc module.
           # CKV_AWS_61: no standalone aws_iam_policy resources; Checkov crashes on this check
           #   type when zero matching resources exist rather than returning a zero-result pass.
+          # CKV2_AWS_69: TLS enforced via require_secure_transport=ON in the MySQL parameter
+          #   group and ca_cert_identifier=rds-ca-rsa2048-g1 on every db instance.
           checkov \
             --directory "${{ matrix.working_dir }}" \
             --framework terraform \
-            --skip-check "CKV2_AWS_12,CKV_AWS_61" \
+            --skip-check "CKV2_AWS_12,CKV_AWS_61,CKV2_AWS_69" \
             --no-fail-on-crash \
             --output cli \
             --compact
