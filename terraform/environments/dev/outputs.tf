@@ -31,6 +31,6 @@ output "rds_secret_names" {
 }
 
 output "github_actions_role_arn" {
-  description = "Add this as AWS_ROLE_ARN secret in GitHub repository settings"
-  value       = aws_iam_role.github_actions.arn
+  description = "IAM role assumed by GitHub Actions via OIDC (created by terraform/bootstrap)"
+  value       = data.aws_iam_role.github_actions.arn
 }
