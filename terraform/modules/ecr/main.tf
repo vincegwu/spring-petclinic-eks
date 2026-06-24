@@ -7,11 +7,28 @@ terraform {
   }
 }
 
+resource "aws_kms_key" "ecr" {
+  description             = "KMS key for ECR repository encryption"
+  enable_key_rotation     = true
+  deletion_window_in_days = 7
+  tags                    = var.tags
+}
+
+resource "aws_kms_alias" "ecr" {
+  name          = "alias/spring-petclinic-ecr"
+  target_key_id = aws_kms_key.ecr.key_id
+}
+
 resource "aws_ecr_repository" "this" {
   for_each             = toset(var.services)
   name                 = "spring-petclinic/${each.key}"
-  image_tag_mutability = "MUTABLE"
+  image_tag_mutability = "IMMUTABLE"
   force_delete         = true
+
+  encryption_configuration {
+    encryption_type = "KMS"
+    kms_key         = aws_kms_key.ecr.arn
+  }
 
   image_scanning_configuration {
     scan_on_push = true

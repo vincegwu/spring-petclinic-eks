@@ -78,9 +78,18 @@ resource "aws_security_group" "cluster" {
   }
 
   egress {
+    description = "Control plane to node communication (nodes share this SG)"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
+    self        = true
+  }
+
+  egress {
+    description = "HTTPS to AWS services"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
@@ -117,9 +126,26 @@ resource "aws_security_group" "nodes" {
   }
 
   egress {
+    description = "Node-to-node and pod-to-pod communication"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
+    self        = true
+  }
+
+  egress {
+    description = "HTTPS to AWS services, ECR, and internet"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "DNS resolution"
+    from_port   = 53
+    to_port     = 53
+    protocol    = "udp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
