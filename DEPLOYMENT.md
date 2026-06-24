@@ -100,6 +100,8 @@ terraform output github_actions_role_arn_prod
 ```
 
 > **Why bootstrap owns OIDC:** GitHub Actions authenticates to AWS via OIDC before it can run Terraform. If the OIDC provider and IAM roles were inside the environment configs, nothing could go first — a classic chicken-and-egg. Bootstrap runs once with local credentials to break the cycle.
+>
+> The roles are granted `AdministratorAccess` (needed to provision VPC, EKS, RDS, IAM, etc.) plus explicit S3/DynamoDB permissions scoped to the state bucket and lock table. The OIDC trust policy limits who can assume the role to GitHub Actions on the specific repo and branch, so `AdministratorAccess` does not mean the role is unrestricted.
 
 ---
 

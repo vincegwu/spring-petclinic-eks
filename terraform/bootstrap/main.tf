@@ -115,18 +115,47 @@ resource "aws_iam_role" "github_actions_dev" {
   tags = { ManagedBy = "terraform-bootstrap" }
 }
 
-resource "aws_iam_role_policy" "github_actions_ecr_dev" {
-  name = "ecr-get-auth-token"
+resource "aws_iam_role_policy" "github_actions_dev" {
+  name = "terraform-ci"
   role = aws_iam_role.github_actions_dev.id
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["ecr:GetAuthorizationToken"]
-      Resource = "*"
-    }]
+    Statement = [
+      {
+        Sid    = "TerraformStateS3"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket",
+        ]
+        Resource = [
+          aws_s3_bucket.state.arn,
+          "${aws_s3_bucket.state.arn}/dev/*",
+        ]
+      },
+      {
+        Sid    = "TerraformStateLock"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:DeleteItem",
+        ]
+        Resource = aws_dynamodb_table.locks.arn
+      },
+    ]
   })
+}
+
+# Terraform manages VPC, EKS, ECR, RDS, IAM, Secrets Manager, Helm add-ons, etc.
+# AdministratorAccess is standard for a Terraform CI role; the OIDC trust policy
+# already hard-scopes it to the specific repo + branch.
+resource "aws_iam_role_policy_attachment" "github_actions_dev_admin" {
+  role       = aws_iam_role.github_actions_dev.name
+  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
 }
 
 resource "aws_iam_role" "github_actions_prod" {
@@ -152,18 +181,44 @@ resource "aws_iam_role" "github_actions_prod" {
   tags = { ManagedBy = "terraform-bootstrap" }
 }
 
-resource "aws_iam_role_policy" "github_actions_ecr_prod" {
-  name = "ecr-get-auth-token"
+resource "aws_iam_role_policy" "github_actions_prod" {
+  name = "terraform-ci"
   role = aws_iam_role.github_actions_prod.id
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["ecr:GetAuthorizationToken"]
-      Resource = "*"
-    }]
+    Statement = [
+      {
+        Sid    = "TerraformStateS3"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket",
+        ]
+        Resource = [
+          aws_s3_bucket.state.arn,
+          "${aws_s3_bucket.state.arn}/prod/*",
+        ]
+      },
+      {
+        Sid    = "TerraformStateLock"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:DeleteItem",
+        ]
+        Resource = aws_dynamodb_table.locks.arn
+      },
+    ]
   })
+}
+
+resource "aws_iam_role_policy_attachment" "github_actions_prod_admin" {
+  role       = aws_iam_role.github_actions_prod.name
+  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
 }
 
 output "state_bucket"                { value = aws_s3_bucket.state.bucket }
