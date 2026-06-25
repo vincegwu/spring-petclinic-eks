@@ -14,13 +14,6 @@ on:
       - main
     paths:
       - "terraform/**"
-  workflow_dispatch:
-    inputs:
-      confirm_destroy:
-        description: "Type the environment name ('dev' or 'prod') to destroy ALL resources for that environment. Leave blank to do nothing."
-        required: false
-        type: string
-        default: ""
 
 permissions:
   id-token: write
@@ -182,25 +175,3 @@ jobs:
           TF_VAR_github_repo_url: https://github.com/${{ github.repository }}.git
           TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
         run: terraform apply -input=false -auto-approve
-
-      # Manual-only: requires running this workflow via "Run workflow" and typing
-      # the target environment name into confirm_destroy. Destroys every resource
-      # for that environment — there is no undo.
-      - name: Verify destroy confirmation
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          if [[ "${{ inputs.confirm_destroy }}" != "${{ matrix.environment }}" ]]; then
-            echo "::error::confirm_destroy must exactly match the target environment ('${{ matrix.environment }}'). Got: '${{ inputs.confirm_destroy }}'. Aborting — no resources were destroyed."
-            exit 1
-          fi
-
-      - name: Terraform Destroy
-        if: github.event_name == 'workflow_dispatch' && inputs.confirm_destroy == matrix.environment
-        working-directory: ${{ matrix.working_dir }}
-        env:
-          TF_VAR_azure_openai_key: ${{ secrets.AZURE_OPENAI_KEY }}
-          TF_VAR_azure_openai_endpoint: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-          TF_VAR_github_token: ${{ secrets.GH_PAT }}
-          TF_VAR_github_repo_url: https://github.com/${{ github.repository }}.git
-          TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-        run: terraform destroy -input=false -auto-approve
