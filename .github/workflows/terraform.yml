@@ -101,6 +101,7 @@ jobs:
           TF_VAR_azure_openai_key: ${{ secrets.AZURE_OPENAI_KEY }}
           TF_VAR_azure_openai_endpoint: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
           TF_VAR_github_token: ${{ secrets.GH_PAT }}
+          TF_VAR_github_repo_url: https://github.com/${{ github.repository }}.git
           TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
         run: |
           # Target the same AWS resources as Stage 1 apply so that planning
@@ -147,6 +148,7 @@ jobs:
           TF_VAR_azure_openai_key: ${{ secrets.AZURE_OPENAI_KEY }}
           TF_VAR_azure_openai_endpoint: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
           TF_VAR_github_token: ${{ secrets.GH_PAT }}
+          TF_VAR_github_repo_url: https://github.com/${{ github.repository }}.git
           TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
         run: |
           terraform apply \
@@ -170,5 +172,6 @@ jobs:
           TF_VAR_azure_openai_key: ${{ secrets.AZURE_OPENAI_KEY }}
           TF_VAR_azure_openai_endpoint: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
           TF_VAR_github_token: ${{ secrets.GH_PAT }}
+          TF_VAR_github_repo_url: https://github.com/${{ github.repository }}.git
           TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
         run: terraform apply -input=false -auto-approve
