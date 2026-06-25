@@ -8,6 +8,7 @@ on:
     paths:
       - "upstream/**"
       - ".github/workflows/ci.yml"
+  workflow_dispatch: {}
 
 permissions:
   id-token: write   # Required for OIDC
