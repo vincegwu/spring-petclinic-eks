@@ -17,6 +17,16 @@ locals {
     Environment = local.env
     ManagedBy   = "terraform"
   }
+
+  # EKS access entries require the underlying IAM role ARN, not the STS
+  # assumed-role session ARN that aws_caller_identity returns when Terraform
+  # is running as an assumed role (e.g. via GitHub Actions OIDC).
+  caller_arn = data.aws_caller_identity.current.arn
+  caller_admin_arn = (
+    can(regex("^arn:aws:sts::[0-9]+:assumed-role/", local.caller_arn))
+    ? replace(local.caller_arn, "/^arn:aws:sts::(\\d+):assumed-role/([^/]+)/.*$/", "arn:aws:iam::$1:role/$2")
+    : local.caller_arn
+  )
 }
 
 data "aws_caller_identity" "current" {}
@@ -77,18 +87,18 @@ module "ecr" {
 
 # ── EKS ───────────────────────────────────────────────────────────────────────
 module "eks" {
-  source              = "../../modules/eks"
-  cluster_name        = var.cluster_name
-  environment         = local.env
-  vpc_id              = module.vpc.vpc_id
-  private_subnet_ids  = module.vpc.private_subnet_ids
-  public_subnet_ids   = module.vpc.public_subnet_ids
-  node_instance_type  = var.node_instance_type
-  node_min_size       = var.node_min_size
-  node_max_size       = var.node_max_size
-  node_desired_size   = var.node_desired_size
-  cluster_admin_arns  = [data.aws_caller_identity.current.arn]
-  tags                = local.tags
+  source             = "../../modules/eks"
+  cluster_name       = var.cluster_name
+  environment        = local.env
+  vpc_id             = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnet_ids
+  public_subnet_ids  = module.vpc.public_subnet_ids
+  node_instance_type = var.node_instance_type
+  node_min_size      = var.node_min_size
+  node_max_size      = var.node_max_size
+  node_desired_size  = var.node_desired_size
+  cluster_admin_arns = [local.caller_admin_arn]
+  tags               = local.tags
 }
 
 # ── RDS — one instance per data service ──────────────────────────────────────
