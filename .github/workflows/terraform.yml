@@ -40,6 +40,11 @@ jobs:
             TARGET="${{ github.ref_name }}"
           fi
 
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "$TARGET" != "dev" ]]; then
+            echo "::error::Manual runs are only allowed against dev. Select 'dev' in 'Use workflow from' — got '$TARGET'."
+            exit 1
+          fi
+
           if [[ "$TARGET" == "dev" ]]; then
             echo 'matrix={"include":[{"environment":"dev","branch":"dev","working_dir":"terraform/environments/dev","aws_role_secret":"AWS_ROLE_ARN_DEV"}]}' >> $GITHUB_OUTPUT
           elif [[ "$TARGET" == "main" ]]; then
