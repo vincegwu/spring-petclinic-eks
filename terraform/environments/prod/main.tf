@@ -136,11 +136,33 @@ module "rds_genai" {
   tags                       = local.tags
 }
 
+# ── KMS key for application secrets ─────────────────────────────────────────
+resource "aws_kms_key" "secrets" {
+  description             = "KMS key for application secrets (${local.env})"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "EnableRootAccess"
+      Effect    = "Allow"
+      Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
+      Action    = "kms:*"
+      Resource  = "*"
+    }]
+  })
+
+  tags = local.tags
+}
+
 # ── Azure OpenAI credentials in Secrets Manager ──────────────────────────────
 resource "aws_secretsmanager_secret" "azure_openai" {
+  #checkov:skip=CKV2_AWS_57:External API key — Lambda rotation is not applicable
   name                    = "petclinic/${local.env}/genai-service/azure-openai"
   description             = "Azure OpenAI credentials for genai-service (${local.env})"
   recovery_window_in_days = 7
+  kms_key_id              = aws_kms_key.secrets.arn
   tags                    = local.tags
 }
 
