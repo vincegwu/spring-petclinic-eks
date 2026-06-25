@@ -14,6 +14,7 @@ on:
       - main
     paths:
       - "terraform/**"
+  workflow_dispatch: {}
 
 permissions:
   id-token: write
@@ -46,7 +47,7 @@ jobs:
           fi
 
   terraform:
-    name: Terraform ${{ github.event_name == 'push' && 'Apply' || 'Plan' }} — ${{ matrix.environment }}
+    name: Terraform ${{ github.event_name != 'pull_request' && 'Apply' || 'Plan' }} — ${{ matrix.environment }}
     runs-on: ubuntu-latest
     needs: filter
 
@@ -142,7 +143,7 @@ jobs:
       # The Helm and Kubernetes providers cannot connect until the cluster exists,
       # so those resources are deferred to Stage 2.
       - name: Terraform Apply — Stage 1 (AWS infrastructure)
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         working-directory: ${{ matrix.working_dir }}
         env:
           TF_VAR_azure_openai_key: ${{ secrets.AZURE_OPENAI_KEY }}
@@ -166,7 +167,7 @@ jobs:
       # Stage 2: Helm charts (ESO, ArgoCD) and Kubernetes manifests.
       # The cluster is guaranteed to exist at this point.
       - name: Terraform Apply — Stage 2 (Helm add-ons + ArgoCD application)
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         working-directory: ${{ matrix.working_dir }}
         env:
           TF_VAR_azure_openai_key: ${{ secrets.AZURE_OPENAI_KEY }}
