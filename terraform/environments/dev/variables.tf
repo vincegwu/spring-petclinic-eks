@@ -30,7 +30,7 @@ variable "node_max_size" {
 
 variable "node_desired_size" {
   type    = number
-  default = 2
+  default = 3
 }
 
 variable "rds_instance_class" {
