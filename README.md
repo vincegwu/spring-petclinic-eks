@@ -2,7 +2,7 @@
 
 A production-ready GitOps deployment of the [Spring PetClinic Microservices](https://github.com/spring-petclinic/spring-petclinic-microservices) application on AWS EKS, using Terraform for infrastructure, GitHub Actions for CI, and ArgoCD for continuous delivery.
 
-The application source lives in `upstream/` (tracked as a [git submodule](https://github.com/spring-petclinic/spring-petclinic-microservices)). Everything else in this repository is the deployment infrastructure.
+The application source lives in `upstream/` (tracked as a [git submodule](https://github.com/spring-petclinic/spring-petclinic-microservices)). Everything else in this repository is the deployment infrastructures.
 
 ---
 
