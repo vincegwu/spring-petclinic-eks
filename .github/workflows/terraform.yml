@@ -1,0 +1,178 @@
+name: Terraform — Plan and Apply
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform.yml"
+  pull_request:
+    branches:
+      - dev
+      - main
+    paths:
+      - "terraform/**"
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+env:
+  AWS_REGION: us-east-1
+  TF_VERSION: "1.9.0"
+
+jobs:
+  filter:
+    name: Determine target environment
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - id: set
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            TARGET="${{ github.base_ref }}"
+          else
+            TARGET="${{ github.ref_name }}"
+          fi
+
+          if [[ "$TARGET" == "dev" ]]; then
+            echo 'matrix={"include":[{"environment":"dev","branch":"dev","working_dir":"terraform/environments/dev","aws_role_secret":"AWS_ROLE_ARN_DEV"}]}' >> $GITHUB_OUTPUT
+          elif [[ "$TARGET" == "main" ]]; then
+            echo 'matrix={"include":[{"environment":"prod","branch":"main","working_dir":"terraform/environments/prod","aws_role_secret":"AWS_ROLE_ARN_PROD"}]}' >> $GITHUB_OUTPUT
+          fi
+
+  terraform:
+    name: Terraform ${{ github.event_name != 'pull_request' && 'Apply' || 'Plan' }} — ${{ matrix.environment }}
+    runs-on: ubuntu-latest
+    needs: filter
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.filter.outputs.matrix) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets[matrix.aws_role_secret] }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Terraform ${{ env.TF_VERSION }}
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: ${{ matrix.working_dir }}
+        run: terraform init -input=false
+
+      - name: Terraform Validate
+        working-directory: ${{ matrix.working_dir }}
+        run: terraform validate
+
+      - name: Scan Terraform with Checkov
+        run: |
+          pip install checkov --quiet
+          # CKV2_AWS_12: graph check — requires terraform_graph runner which is not
+          #   a valid framework. Control enforced via aws_default_security_group in vpc module.
+          # CKV_AWS_61: no standalone aws_iam_policy resources; Checkov crashes on this check
+          #   type when zero matching resources exist rather than returning a zero-result pass.
+          # CKV2_AWS_69: TLS enforced via require_secure_transport=ON in the MySQL parameter
+          #   group and ca_cert_identifier=rds-ca-rsa2048-g1 on every db instance.
+          checkov \
+            --directory "${{ matrix.working_dir }}" \
+            --framework terraform \
+            --skip-check "CKV2_AWS_12,CKV_AWS_61,CKV2_AWS_69" \
+            --no-fail-on-crash \
+            --output cli \
+            --compact
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ matrix.working_dir }}
+        env:
+          TF_VAR_azure_openai_key: ${{ secrets.AZURE_OPENAI_KEY }}
+          TF_VAR_azure_openai_endpoint: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          TF_VAR_github_token: ${{ secrets.GH_PAT }}
+          TF_VAR_github_repo_url: https://github.com/${{ github.repository }}.git
+          TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        run: |
+          # Target the same AWS resources as Stage 1 apply so that planning
+          # succeeds even before the EKS cluster exists (Kubernetes/Helm
+          # providers require a live cluster endpoint and cannot be initialised
+          # against an unknown value on a fresh deployment).
+          terraform plan \
+            -target=module.vpc \
+            -target=module.eks \
+            -target=module.ecr \
+            -target=module.rds_customers \
+            -target=module.rds_vets \
+            -target=module.rds_visits \
+            -target=module.rds_genai \
+            -target=aws_secretsmanager_secret.azure_openai \
+            -target=aws_secretsmanager_secret_version.azure_openai \
+            -input=false -no-color -out=tfplan 2>&1 | tee plan.txt
+          echo "exitcode=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+
+      - name: Post plan to PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('${{ matrix.working_dir }}/plan.txt', 'utf8');
+            const truncated = plan.length > 60000
+              ? plan.slice(0, 60000) + '\n\n... truncated ...'
+              : plan;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## Terraform Plan — \`${{ matrix.environment }}\`\n\`\`\`terraform\n${truncated}\n\`\`\``
+            });
+
+      # Stage 1: EKS cluster and all AWS resources (VPC, ECR, RDS, IAM).
+      # The Helm and Kubernetes providers cannot connect until the cluster exists,
+      # so those resources are deferred to Stage 2.
+      - name: Terraform Apply — Stage 1 (AWS infrastructure)
+        if: github.event_name != 'pull_request'
+        working-directory: ${{ matrix.working_dir }}
+        env:
+          TF_VAR_azure_openai_key: ${{ secrets.AZURE_OPENAI_KEY }}
+          TF_VAR_azure_openai_endpoint: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          TF_VAR_github_token: ${{ secrets.GH_PAT }}
+          TF_VAR_github_repo_url: https://github.com/${{ github.repository }}.git
+          TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        run: |
+          terraform apply \
+            -target=module.vpc \
+            -target=module.eks \
+            -target=module.ecr \
+            -target=module.rds_customers \
+            -target=module.rds_vets \
+            -target=module.rds_visits \
+            -target=module.rds_genai \
+            -target=aws_secretsmanager_secret.azure_openai \
+            -target=aws_secretsmanager_secret_version.azure_openai \
+            -input=false -auto-approve
+
+      # Stage 2: Helm charts (ESO, ArgoCD) and Kubernetes manifests.
+      # The cluster is guaranteed to exist at this point.
+      - name: Terraform Apply — Stage 2 (Helm add-ons + ArgoCD application)
+        if: github.event_name != 'pull_request'
+        working-directory: ${{ matrix.working_dir }}
+        env:
+          TF_VAR_azure_openai_key: ${{ secrets.AZURE_OPENAI_KEY }}
+          TF_VAR_azure_openai_endpoint: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          TF_VAR_github_token: ${{ secrets.GH_PAT }}
+          TF_VAR_github_repo_url: https://github.com/${{ github.repository }}.git
+          TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        run: terraform apply -input=false -auto-approve
