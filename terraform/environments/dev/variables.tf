@@ -33,6 +33,12 @@ variable "node_desired_size" {
   default = 3
 }
 
+variable "extra_cluster_admin_arns" {
+  description = "IAM principal ARNs always granted EKS cluster-admin access, regardless of which identity runs terraform apply (e.g. developers who need kubectl access)"
+  type        = list(string)
+  default     = ["arn:aws:iam::205930623242:user/egwu"]
+}
+
 variable "rds_instance_class" {
   type    = string
   default = "db.t3.micro"
