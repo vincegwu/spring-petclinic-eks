@@ -8,19 +8,21 @@
   value:
     name: SPRING_CLOUD_CONFIG_SERVER_GIT_BASEDIR
     value: /tmp/config-repo
-# Spring Cloud Config Server's /{app}/{profile}[/{label}] pattern intercepts
-# /actuator/health/readiness and /actuator/health/liveness (both 3 segments),
-# returning 404. Single-segment /actuator is never matched by config patterns
-# and goes directly to Spring Boot Actuator's root endpoint (returns 200).
+# Spring Cloud Config Server has no spring-boot-starter-actuator on the classpath,
+# so /actuator/health/readiness and /actuator/health/liveness (3 segments) get
+# intercepted as /{app}/{profile}/{label} and return 404 (NoSuchLabelException).
+# /actuator/health (2 segments) is also intercepted as /{app}/{profile} but returns
+# 200 with an empty config JSON when the git backend is reachable — which is the
+# correct signal for both pod probes and the discovery-server init container check.
 - op: replace
   path: /spec/template/spec/containers/0/readinessProbe/httpGet/path
-  value: /actuator
+  value: /actuator/health
 - op: replace
   path: /spec/template/spec/containers/0/readinessProbe/httpGet/port
   value: 8888
 - op: replace
   path: /spec/template/spec/containers/0/livenessProbe/httpGet/path
-  value: /actuator
+  value: /actuator/health
 - op: replace
   path: /spec/template/spec/containers/0/livenessProbe/httpGet/port
   value: 8888
