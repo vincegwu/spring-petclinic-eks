@@ -1,8 +1,8 @@
 - op: add
   path: /spec/template/spec/containers/0/env/-
   value:
-    name: HOME
-    value: /tmp
+    name: JAVA_TOOL_OPTIONS
+    value: "-Duser.home=/tmp"
 - op: add
   path: /spec/template/spec/containers/0/env/-
   value:
