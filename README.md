@@ -60,7 +60,7 @@ The application is composed of eight Spring Boot microservices. Services are sta
 | `visits-service` | 8082 | MySQL | Manages pet visit records |
 | `genai-service` | 8084 | MySQL | Spring AI-powered assistant (Azure OpenAI — gpt-4.1-mini deployment) |
 
-Each service that requires a database gets its **own isolated RDS MySQL 8.0 instance** — there is no shared database.
+Each service that requires a database gets its **own isolated RDS MySQL 8.0 instance** — there is no shared database. Because of this, the visits-service schema contains **no foreign key to the `pets` table** (which lives in the customers-service database). Referential integrity between services is enforced at the application layer only.
 
 ---
 
@@ -83,9 +83,10 @@ A push to either branch triggers the full CI/CD pipeline automatically. Pull req
 |---|---|
 | `bootstrap/` | S3 state bucket, DynamoDB lock table, GitHub Actions OIDC provider, `github-actions-dev` + `github-actions-prod` IAM roles — **run once manually before anything else** |
 | `modules/vpc` | VPC (10.0/10.1.0.0/16), 3 public + 3 private subnets across AZs, Internet Gateway, route tables (no NAT — nodes are in public subnets; private subnets are RDS-only with no egress) |
-| `modules/eks` | EKS cluster (Kubernetes 1.31), managed node group (in public subnets for IGW-based NodePort access), OIDC provider, IRSA roles for External Secrets Operator and EBS CSI driver, CoreDNS / kube-proxy / VPC CNI / EBS CSI add-ons |
+| `modules/eks` | EKS cluster (Kubernetes 1.35), managed node group (in public subnets for IGW-based NodePort access), OIDC provider, IRSA roles for External Secrets Operator and EBS CSI driver, CoreDNS / kube-proxy / VPC CNI / EBS CSI add-ons |
 | `modules/ecr` | 8 ECR repositories under `spring-petclinic/<service>`, lifecycle policy (30 tagged / expire untagged after 7 days), push permissions for GitHub Actions |
 | `modules/rds` | RDS MySQL 8.0 per data service — random 24-char password, Secrets Manager secret, private subnet group, security group (port 3306 from EKS nodes only), Multi-AZ and deletion protection enabled in prod |
+| `environments/dev` (and `prod`) | In addition to wiring modules: four `aws_security_group_rule` egress resources that open TCP 3306 from the EKS node SG to each RDS SG. The RDS module adds the corresponding inbound rule; both sides are required because node SG egress is otherwise restricted to HTTPS and DNS. |
 
 Environment configurations (`environments/dev`, `environments/prod`) wire the modules together. The GitHub Actions OIDC provider and trust roles are created by `terraform/bootstrap` (run once manually) so that CI can authenticate before any environment Terraform has run.
 
@@ -100,7 +101,7 @@ Environment configurations (`environments/dev`, `environments/prod`) wire the mo
 
 ### Kubernetes (`k8s/`)
 
-Manifests are managed with **Kustomize**:
+Manifests are managed with **Kustomize**. All four DB-dependent services (`customers-service`, `vets-service`, `visits-service`, `genai-service`) include a `startupProbe` (15 × 10 s = 150 s budget) in addition to liveness and readiness probes. JVM startup against a remote MySQL instance takes 60–80 s; without the startup probe, the liveness probe kills the pod before Spring Boot finishes initialising.
 
 ```
 k8s/
@@ -165,6 +166,8 @@ A `filter` job runs first to select only the environment matching the triggering
 ### `.github/workflows/destroy.yml` — Destroy an Environment
 
 Manual only (`workflow_dispatch`). Pick the `environment` input (`dev`/`prod`) and type the same name into `confirm_destroy` to run `terraform destroy` — any other value (including blank) aborts with no changes. See [DEPLOYMENT.md](./DEPLOYMENT.md#destroying-an-environment).
+
+Before `terraform destroy`, the workflow deletes orphaned VPC ENIs left behind by the VPC CNI plugin after node termination (these are not tracked by Terraform and would otherwise block VPC deletion). ENIs owned by AWS services — EKS control-plane nodes, RDS — are automatically skipped; they are cleaned up when Terraform destroys the respective resources.
 
 ### `.github/workflows/pr-checks.yml` — PR Validation
 

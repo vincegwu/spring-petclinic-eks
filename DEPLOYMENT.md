@@ -252,6 +252,8 @@ kubectl get nodes -o wide
 # Use the EXTERNAL-IP column
 ```
 
+Run `aws eks update-kubeconfig` any time `kubectl` reports a DNS resolution error for the cluster endpoint — this refreshes a stale kubeconfig with the current API server address.
+
 This requires your IAM identity to have an EKS access entry — see `extra_cluster_admin_arns` in [Step 3](#step-3--configure-terraformtfvars). Without it, `kubectl` commands fail with `Unauthorized`.
 
 | Service | NodePort | URL |
@@ -292,3 +294,51 @@ kubectl port-forward -n petclinic-prod svc/zipkin 9411:9411
 ```
 
 Then open `http://localhost:9411`.
+
+---
+
+## Troubleshooting
+
+### DB-dependent pods stuck in CrashLoopBackOff at startup
+
+**Symptom:** `customers-service`, `vets-service`, `visits-service`, or `genai-service` crash repeatedly. Logs show HikariPool starting, then the pod is killed with no error — or the pod is killed mid-startup with a `Connection timed out` error to the RDS endpoint.
+
+**Cause A — TCP timeout (SG egress missing):** The node security group (`petclinic-<env>-nodes-sg`) restricts egress to HTTPS and DNS by default. TCP 3306 to each RDS security group must be explicitly allowed. This is managed by `aws_security_group_rule` resources in `terraform/environments/<env>/main.tf`. If you provisioned the infrastructure before these rules existed, run `terraform apply` to add them.
+
+**Cause B — Liveness probe kills pod before startup completes:** JVM + Spring Boot + MySQL schema initialisation takes 60–80 s on first boot. The liveness probe is protected by a `startupProbe` (15 × 10 s = 150 s) in all four DB-service deployments. If you see the pod reach `Started ... in Xs` in logs immediately followed by shutdown hooks, the startup probe budget has been exceeded — check that the probe configuration in `k8s/base/<service>/deployment.yaml` matches the current values.
+
+### visits-service fails with `Failed to open the referenced table 'pets'`
+
+The visits-service MySQL schema previously contained `FOREIGN KEY (pet_id) REFERENCES pets(id)`. The `pets` table lives in the customers-service RDS instance — a separate database — so this FK always fails on fresh installs. The FK has been removed from `upstream/spring-petclinic-visits-service/src/main/resources/db/mysql/schema.sql`.
+
+If you are running an older image (before this fix), the schema uses `CREATE TABLE IF NOT EXISTS`, so you can unblock the service by creating the table manually:
+
+```bash
+# Get credentials
+SECRET=$(aws secretsmanager get-secret-value \
+  --secret-id petclinic/dev/visits-service/db \
+  --query SecretString --output text)
+
+HOST=$(echo $SECRET | jq -r .host)
+USER=$(echo $SECRET | jq -r .username)
+PASS=$(echo $SECRET | jq -r .password)
+
+# Create the table from a temporary pod inside the cluster
+kubectl run mysql-init -n petclinic-dev --image=mysql:8.0 --restart=Never \
+  --env="MYSQL_PWD=$PASS" --command -- \
+  mysql -h "$HOST" -u "$USER" petclinic \
+  -e "CREATE TABLE IF NOT EXISTS visits (
+        id INT(4) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        pet_id INT(4) UNSIGNED NOT NULL,
+        visit_date DATE,
+        description VARCHAR(8192)
+      ) engine=InnoDB;"
+
+kubectl delete pod mysql-init -n petclinic-dev
+```
+
+Then `kubectl rollout restart deployment/visits-service -n petclinic-<env>`.
+
+### Destroy workflow — AuthFailure on ENI detach
+
+If the destroy workflow logs show `AuthFailure` when detaching ENIs, these are EKS control-plane or other service-owned ENIs that cannot be touched by the account. They are cleaned up automatically when Terraform destroys the EKS cluster and VPC. The errors are non-fatal (`|| true`) and the destroy proceeds normally.
