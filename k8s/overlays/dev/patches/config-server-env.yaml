@@ -8,19 +8,19 @@
   value:
     name: SPRING_CLOUD_CONFIG_SERVER_GIT_BASEDIR
     value: /tmp/config-repo
-- op: add
-  path: /spec/template/spec/containers/0/env/-
-  value:
-    name: MANAGEMENT_SERVER_PORT
-    value: "8081"
-- op: add
-  path: /spec/template/spec/containers/0/ports/-
-  value:
-    containerPort: 8081
-    name: management
+# Spring Cloud Config Server's /{app}/{profile}[/{label}] pattern intercepts
+# /actuator/health/readiness and /actuator/health/liveness (both 3 segments),
+# returning 404. Single-segment /actuator is never matched by config patterns
+# and goes directly to Spring Boot Actuator's root endpoint (returns 200).
+- op: replace
+  path: /spec/template/spec/containers/0/readinessProbe/httpGet/path
+  value: /actuator
 - op: replace
   path: /spec/template/spec/containers/0/readinessProbe/httpGet/port
-  value: 8081
+  value: 8888
+- op: replace
+  path: /spec/template/spec/containers/0/livenessProbe/httpGet/path
+  value: /actuator
 - op: replace
   path: /spec/template/spec/containers/0/livenessProbe/httpGet/port
-  value: 8081
+  value: 8888
