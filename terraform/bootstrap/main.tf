@@ -103,7 +103,9 @@ resource "aws_iam_role" "github_actions_dev" {
       Action    = "sts:AssumeRoleWithWebIdentity"
       Condition = {
         StringLike = {
-          "token.actions.githubusercontent.com:sub" = "repo:${var.github_org}/${var.github_repo}:ref:refs/heads/dev"
+          # Allow any branch so the destroy workflow can be dispatched from any ref,
+          # not just dev. Still scoped to this specific repo.
+          "token.actions.githubusercontent.com:sub" = "repo:${var.github_org}/${var.github_repo}:*"
         }
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
