@@ -121,6 +121,8 @@ jobs:
           exit-code: '1'
           severity: HIGH,CRITICAL
           ignore-unfixed: true
+          trivy-version: "0.71.2"
+          trivyignores: ".trivyignore"
 
       - name: Push Docker image
         run: docker push ${{ steps.build.outputs.image_uri }}

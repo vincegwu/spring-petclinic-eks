@@ -1,0 +1,10 @@
+# Trivy vulnerability suppressions
+#
+# Add CVE IDs here (one per line) for findings that are confirmed false positives
+# or accepted risks after review. Always include a comment explaining why.
+#
+# Format:
+#   CVE-YYYY-NNNNN   # reason — reviewed by <who> on <date>
+#
+# Example:
+#   CVE-2023-2976    # guava: affects server-side RPC only; not used in this app
