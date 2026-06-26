@@ -22,6 +22,10 @@ patches:
   target:
     kind: Service
     name: zipkin
+- path: patches/config-server-env.yaml
+  target:
+    kind: Deployment
+    name: config-server
 
 # Image tags are updated automatically by the CI workflow (replaced with dev-<git-sha>).
 # Replace ACCOUNT and REGION once after running `terraform apply` on dev.

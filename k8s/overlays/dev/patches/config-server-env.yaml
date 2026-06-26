@@ -1,0 +1,10 @@
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: HOME
+    value: /tmp
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: SPRING_CLOUD_CONFIG_SERVER_GIT_BASEDIR
+    value: /tmp/config-repo
