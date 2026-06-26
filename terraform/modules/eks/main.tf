@@ -12,6 +12,7 @@ terraform {
 }
 
 data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
 
 # ── KMS key for EKS secrets encryption ──────────────────────────────────────
 resource "aws_kms_key" "eks_secrets" {
@@ -313,11 +314,26 @@ resource "aws_iam_role_policy" "eso_secrets" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
-      Resource = "arn:aws:secretsmanager:*:*:secret:petclinic/${var.environment}/*"
-    }]
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
+        Resource = "arn:aws:secretsmanager:*:*:secret:petclinic/${var.environment}/*"
+      },
+      {
+        # Each Secrets Manager secret is encrypted with its own KMS key (one per RDS
+        # service module instance, plus one for Azure OpenAI in the env layer).
+        # kms:ViaService ensures this only applies when Secrets Manager is the caller.
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt", "kms:DescribeKey"]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = "secretsmanager.${data.aws_region.current.name}.amazonaws.com"
+          }
+        }
+      }
+    ]
   })
 }
 

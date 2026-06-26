@@ -256,6 +256,16 @@ resource "helm_release" "argocd" {
         params = {
           "server.insecure" = true
         }
+        # Teach ArgoCD about fields added in Kubernetes versions newer than its
+        # bundled schema (cluster runs 1.35, ArgoCD 2.13 schema tops out at 1.32).
+        # Without this entry the comparison phase throws:
+        #   .status.terminatingReplicas: field not declared in schema
+        cm = {
+          # EKS 1.35 adds .status.terminatingReplicas to Deployment; ArgoCD 2.13's
+          # bundled schema predates this. Stripping status before type-check prevents
+          # "field not declared in schema" ComparisonError on every sync attempt.
+          "resource.compareoptions" = "ignoreResourceStatusField: all\n"
+        }
       }
     })
   ]
