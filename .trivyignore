@@ -8,3 +8,8 @@
 #
 # Example:
 #   CVE-2023-2976    # guava: affects server-side RPC only; not used in this app
+
+CVE-2026-2100   # p11-kit / p11-kit-trust in eclipse-temurin Alpine base image.
+                # p11-kit is a PKCS#11 hardware-token broker (smart cards/HSMs).
+                # This Spring Boot app does not use PKCS#11 so the vulnerability
+                # is not reachable; fix (0.26.2-r0) is not yet in Alpine 3.23.
