@@ -8,3 +8,19 @@
   value:
     name: SPRING_CLOUD_CONFIG_SERVER_GIT_BASEDIR
     value: /tmp/config-repo
+- op: add
+  path: /spec/template/spec/containers/0/env/-
+  value:
+    name: MANAGEMENT_SERVER_PORT
+    value: "8081"
+- op: add
+  path: /spec/template/spec/containers/0/ports/-
+  value:
+    containerPort: 8081
+    name: management
+- op: replace
+  path: /spec/template/spec/containers/0/readinessProbe/httpGet/port
+  value: 8081
+- op: replace
+  path: /spec/template/spec/containers/0/livenessProbe/httpGet/port
+  value: 8081
