@@ -124,6 +124,26 @@ jobs:
           trivy-version: "0.71.2"
           trivyignores: ".trivyignore"
 
+      - name: Export Trivy findings as JSON (on scan failure)
+        if: failure()
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.build.outputs.image_uri }}
+          format: json
+          output: trivy-${{ matrix.service }}.json
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivy-version: "0.71.2"
+          trivyignores: ".trivyignore"
+
+      - name: Upload Trivy JSON report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report-${{ matrix.service }}
+          path: trivy-${{ matrix.service }}.json
+          retention-days: 7
+
       - name: Push Docker image
         run: docker push ${{ steps.build.outputs.image_uri }}
 

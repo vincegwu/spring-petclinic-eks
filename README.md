@@ -138,7 +138,7 @@ Prometheus, Grafana, and AlertManager are installed by Terraform via the **kube-
 
 ### `.github/workflows/ci.yml` — Build, Push, Update Tags
 
-Triggers on push to `dev` or `main` (when `upstream/**` changes).
+Triggers on push to `dev` or `main` (when `upstream/**` changes), or manually via **Actions → Run workflow** (`workflow_dispatch`) — useful for rebuilding without an `upstream/` change, e.g. after fixing the pipeline itself.
 
 ```
 1. Matrix-build all 8 service JARs with Maven (parallel)
@@ -154,12 +154,17 @@ AWS authentication uses **GitHub OIDC** — no long-lived credentials are stored
 
 ### `.github/workflows/terraform.yml` — Infrastructure Changes
 
-Triggers on push or PR to `dev`/`main` (when `terraform/**` changes).
+Triggers on push or PR to `dev`/`main` (when `terraform/**` changes), or manually via **Actions → Run workflow** (`workflow_dispatch`).
 
 - **Pull request** → `terraform plan`, output posted as a PR comment
 - **Push** → `terraform apply`
+- **Manual (`workflow_dispatch`)** → `terraform apply`, same as a push, but only against `dev`. The `filter` job fails fast if you pick anything other than `dev` in "Use workflow from" — manual runs against `main`/prod must go through a push instead.
 
 A `filter` job runs first to select only the environment matching the triggering branch (dev → dev, main → prod), then passes a single-entry matrix to the `terraform` job. This avoids the GitHub Actions limitation where `matrix` context is unavailable in job-level `if` conditions, and ensures a push to `dev` never touches prod state.
+
+### `.github/workflows/destroy.yml` — Destroy an Environment
+
+Manual only (`workflow_dispatch`). Pick the `environment` input (`dev`/`prod`) and type the same name into `confirm_destroy` to run `terraform destroy` — any other value (including blank) aborts with no changes. See [DEPLOYMENT.md](./DEPLOYMENT.md#destroying-an-environment).
 
 ### `.github/workflows/pr-checks.yml` — PR Validation
 
@@ -236,7 +241,7 @@ spring-petclinic-eks/
 | Java | 17 | Local development only |
 | Maven | 3.x (wrapper included) | Local development only |
 
-> **kubectl** and **kustomize** are not required on your local machine. Terraform installs and configures all Kubernetes add-ons, and the CI workflow handles Kustomize.
+> **kubectl** and **kustomize** are not required to deploy — Terraform installs and configures all Kubernetes add-ons, and the CI workflow handles Kustomize. You'll still want `kubectl` locally for day-2 operations (checking pod status, port-forwarding Grafana/Zipkin in prod, finding a node's public IP) — see `extra_cluster_admin_arns` in [DEPLOYMENT.md](./DEPLOYMENT.md) for granting your IAM identity cluster access.
 
 ---
 

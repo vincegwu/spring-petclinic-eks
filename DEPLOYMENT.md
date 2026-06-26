@@ -78,6 +78,18 @@ github_repo_url = "https://github.com/your-github-username-or-org/spring-petclin
 
 `github_org` and `github_repo` are no longer needed in the environment `tfvars` — they are consumed by the bootstrap step below.
 
+> **CI doesn't need this value** — `terraform.yml` derives `github_repo_url` automatically from the repository it's running in (`TF_VAR_github_repo_url`). The `tfvars` setting above only matters when you run `terraform apply` locally.
+
+If you (or another developer) want permanent `kubectl` access to a cluster from your own machine — see [Accessing services](#accessing-services) — add your IAM user/role ARN to `extra_cluster_admin_arns` in `terraform/environments/<env>/variables.tf`:
+
+```hcl
+variable "extra_cluster_admin_arns" {
+  default = ["arn:aws:iam::<account-id>:user/<your-iam-user>"]
+}
+```
+
+Without this, only whichever identity last ran `terraform apply` (typically the `github-actions-dev`/`github-actions-prod` CI role) has cluster access.
+
 ---
 
 ## Step 4 — Bootstrap Terraform remote state + OIDC
@@ -211,7 +223,22 @@ Any change to files under `terraform/` triggers the `terraform.yml` workflow aut
 
 The workflow uses a `filter` job to select only the environment that matches the triggering branch (dev → dev environment, main → prod environment), so a push to `dev` never touches the prod state.
 
+You can also re-run apply manually without changing any files — **Actions → Terraform — Plan and Apply → Run workflow**. This only works against `dev`: pick `dev` in "Use workflow from", or the `filter` job fails with an error before anything plans/applies. There is no manual-run path to prod — prod apply only happens via a push to `main`.
+
 The `azure_openai_key` is read from the `AZURE_OPENAI_KEY` GitHub secret at apply time and is never written to the state file in plaintext (it is stored as a `sensitive` variable and encrypted in Secrets Manager alongside the endpoint URL).
+
+---
+
+## Destroying an environment
+
+To tear down all resources for an environment without using your local machine:
+
+1. Go to **Actions → Terraform — Destroy → Run workflow**
+2. Pick the `environment` input (`dev` or `prod`)
+3. In the `confirm_destroy` input, type the environment name exactly (`dev` or `prod`)
+4. Run the workflow
+
+Leaving `confirm_destroy` blank, or entering anything that doesn't exactly match the chosen environment, aborts the run with no changes — this is the only way `terraform destroy` can run from CI. There is no undo; RDS instances are not protected by `deletion_protection` in dev, and the dev `cluster_admin_arns`/`extra_cluster_admin_arns` grants do not change this.
 
 ---
 
@@ -220,9 +247,12 @@ The `azure_openai_key` is read from the `AZURE_OPENAI_KEY` GitHub secret at appl
 All public-facing services use NodePort. Get any node's public IP with:
 
 ```bash
+aws eks update-kubeconfig --name petclinic-dev --region us-east-1   # or petclinic-prod
 kubectl get nodes -o wide
 # Use the EXTERNAL-IP column
 ```
+
+This requires your IAM identity to have an EKS access entry — see `extra_cluster_admin_arns` in [Step 3](#step-3--configure-terraformtfvars). Without it, `kubectl` commands fail with `Unauthorized`.
 
 | Service | NodePort | URL |
 |---|---|---|
