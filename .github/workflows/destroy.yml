@@ -81,9 +81,12 @@ jobs:
           done
 
           # Detach and delete in-use ENIs not attached to an EC2 instance (e.g. lingering CNI ENIs)
+          # Only consider ENIs owned by this account — EKS control-plane and other service-owned
+          # ENIs have a different InstanceOwnerId and cannot be detached (AuthFailure).
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           IN_USE=$(aws ec2 describe-network-interfaces \
             --filters "Name=vpc-id,Values=${VPC_ID}" "Name=status,Values=in-use" \
-            --query "NetworkInterfaces[?Attachment.InstanceOwnerId!='amazon-rds'].NetworkInterfaceId" \
+            --query "NetworkInterfaces[?Attachment.InstanceOwnerId=='${ACCOUNT_ID}'].NetworkInterfaceId" \
             --output text)
           for ENI_ID in $IN_USE; do
             INSTANCE_ID=$(aws ec2 describe-network-interfaces \
