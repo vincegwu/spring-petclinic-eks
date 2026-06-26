@@ -146,6 +146,50 @@ module "rds_genai" {
   tags                       = local.tags
 }
 
+# ── Egress: EKS nodes → RDS (port 3306) ──────────────────────────────────────
+# The RDS module adds an inbound rule on each RDS SG, but the node SG needs a
+# matching egress rule — AWS SGs are stateful per-connection but still require
+# explicit egress entries when egress is restricted.
+resource "aws_security_group_rule" "nodes_to_rds_customers" {
+  type                     = "egress"
+  description              = "MySQL to customers-service RDS"
+  from_port                = 3306
+  to_port                  = 3306
+  protocol                 = "tcp"
+  security_group_id        = module.eks.node_security_group_id
+  source_security_group_id = module.rds_customers.security_group_id
+}
+
+resource "aws_security_group_rule" "nodes_to_rds_vets" {
+  type                     = "egress"
+  description              = "MySQL to vets-service RDS"
+  from_port                = 3306
+  to_port                  = 3306
+  protocol                 = "tcp"
+  security_group_id        = module.eks.node_security_group_id
+  source_security_group_id = module.rds_vets.security_group_id
+}
+
+resource "aws_security_group_rule" "nodes_to_rds_visits" {
+  type                     = "egress"
+  description              = "MySQL to visits-service RDS"
+  from_port                = 3306
+  to_port                  = 3306
+  protocol                 = "tcp"
+  security_group_id        = module.eks.node_security_group_id
+  source_security_group_id = module.rds_visits.security_group_id
+}
+
+resource "aws_security_group_rule" "nodes_to_rds_genai" {
+  type                     = "egress"
+  description              = "MySQL to genai-service RDS"
+  from_port                = 3306
+  to_port                  = 3306
+  protocol                 = "tcp"
+  security_group_id        = module.eks.node_security_group_id
+  source_security_group_id = module.rds_genai.security_group_id
+}
+
 # ── KMS key for application secrets ─────────────────────────────────────────
 resource "aws_kms_key" "secrets" {
   description             = "KMS key for application secrets (${local.env})"

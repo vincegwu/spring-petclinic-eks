@@ -82,18 +82,22 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8081
+            failureThreshold: 15
+            periodSeconds: 10
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
               port: 8081
-            initialDelaySeconds: 30
             periodSeconds: 5
             failureThreshold: 10
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
               port: 8081
-            initialDelaySeconds: 40
             periodSeconds: 10
       volumes:
         - name: tmp
