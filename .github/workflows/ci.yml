@@ -223,5 +223,6 @@ jobs:
             echo "No image tag changes to commit"
           else
             git commit -m "ci(${OVERLAY}): update image tags to ${OVERLAY}-${SHORT_SHA} [skip ci]"
+            git pull --rebase origin "${{ github.ref_name }}"
             git push origin "${{ github.ref_name }}"
           fi
