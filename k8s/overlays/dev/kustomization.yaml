@@ -33,27 +33,27 @@ patches:
 images:
 - name: admin-server
   newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/admin-server
-  newTag: dev-c8dbd8e
+  newTag: dev-97e3150
 - name: api-gateway
   newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/api-gateway
-  newTag: dev-c8dbd8e
+  newTag: dev-97e3150
 - name: config-server
   newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/config-server
-  newTag: dev-c8dbd8e
+  newTag: dev-97e3150
 - name: customers-service
   newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/customers-service
-  newTag: dev-c8dbd8e
+  newTag: dev-97e3150
 - name: discovery-server
   newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/discovery-server
-  newTag: dev-c8dbd8e
+  newTag: dev-97e3150
 - name: genai-service
   newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/genai-service
-  newTag: dev-c8dbd8e
+  newTag: dev-97e3150
 - name: openzipkin/zipkin
   newTag: "3.4"
 - name: vets-service
   newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/vets-service
-  newTag: dev-c8dbd8e
+  newTag: dev-97e3150
 - name: visits-service
   newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/visits-service
-  newTag: dev-c8dbd8e
+  newTag: dev-97e3150
