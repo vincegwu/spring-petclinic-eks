@@ -181,6 +181,33 @@ resource "aws_secretsmanager_secret_version" "azure_openai" {
   secret_string = jsonencode({ api-key = var.azure_openai_key, endpoint = var.azure_openai_endpoint })
 }
 
+# ── gp3 StorageClass (EBS CSI) ───────────────────────────────────────────────
+# Must exist before any Helm release that requests PersistentVolumeClaims.
+# The in-tree gp2 StorageClass created by EKS is not marked as default and uses
+# the deprecated kubernetes.io/aws-ebs provisioner. This resource creates a gp3
+# class backed by the EBS CSI driver (installed as an EKS add-on) and marks it
+# as the cluster default so PVCs without an explicit storageClassName are bound.
+resource "kubernetes_storage_class" "gp3" {
+  metadata {
+    name = "gp3"
+    annotations = {
+      "storageclass.kubernetes.io/is-default-class" = "true"
+    }
+  }
+
+  storage_provisioner    = "ebs.csi.aws.com"
+  reclaim_policy         = "Delete"
+  volume_binding_mode    = "WaitForFirstConsumer"
+  allow_volume_expansion = true
+
+  parameters = {
+    type      = "gp3"
+    encrypted = "true"
+  }
+
+  depends_on = [module.eks]
+}
+
 # ── External Secrets Operator ─────────────────────────────────────────────────
 resource "helm_release" "external_secrets" {
   name             = "external-secrets"
@@ -214,7 +241,7 @@ resource "helm_release" "kube_prometheus_stack" {
   version          = "65.3.1"
   namespace        = "monitoring"
   create_namespace = true
-  timeout          = 600
+  timeout          = 900
 
   values = [
     yamlencode({
@@ -230,8 +257,9 @@ resource "helm_release" "kube_prometheus_stack" {
           storageSpec = {
             volumeClaimTemplate = {
               spec = {
-                accessModes = ["ReadWriteOnce"]
-                resources = { requests = { storage = "50Gi" } }
+                storageClassName = "gp3"
+                accessModes      = ["ReadWriteOnce"]
+                resources        = { requests = { storage = "50Gi" } }
               }
             }
           }
@@ -239,11 +267,12 @@ resource "helm_release" "kube_prometheus_stack" {
       }
       grafana = {
         adminPassword = var.grafana_admin_password
-        service = { type = "ClusterIP" }
+        service       = { type = "ClusterIP" }
         persistence = {
-          enabled      = true
-          size         = "10Gi"
-          accessModes  = ["ReadWriteOnce"]
+          enabled          = true
+          storageClassName = "gp3"
+          size             = "10Gi"
+          accessModes      = ["ReadWriteOnce"]
         }
         dashboardProviders = {
           "dashboardproviders.yaml" = {
@@ -279,8 +308,9 @@ resource "helm_release" "kube_prometheus_stack" {
           storage = {
             volumeClaimTemplate = {
               spec = {
-                accessModes = ["ReadWriteOnce"]
-                resources = { requests = { storage = "10Gi" } }
+                storageClassName = "gp3"
+                accessModes      = ["ReadWriteOnce"]
+                resources        = { requests = { storage = "10Gi" } }
               }
             }
           }
@@ -289,7 +319,7 @@ resource "helm_release" "kube_prometheus_stack" {
     })
   ]
 
-  depends_on = [module.eks]
+  depends_on = [module.eks, kubernetes_storage_class.gp3]
 }
 
 resource "kubectl_manifest" "cluster_secret_store" {
