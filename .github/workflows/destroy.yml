@@ -55,8 +55,6 @@ jobs:
         working-directory: terraform/environments/${{ inputs.environment }}
         run: terraform init -input=false
 
-<<<<<<< HEAD
-=======
       - name: Clean up orphaned VPC ENIs
         run: |
           CLUSTER_NAME="petclinic-${{ inputs.environment }}"
@@ -115,7 +113,6 @@ jobs:
 
           echo "ENI cleanup complete."
 
->>>>>>> dev
       - name: Terraform Destroy
         working-directory: terraform/environments/${{ inputs.environment }}
         env:
