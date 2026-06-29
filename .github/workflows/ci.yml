@@ -122,8 +122,6 @@ jobs:
           exit-code: '1'
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-<<<<<<< HEAD
-=======
           trivy-version: "0.71.2"
           trivyignores: ".trivyignore"
 
@@ -146,7 +144,6 @@ jobs:
           name: trivy-report-${{ matrix.service }}
           path: trivy-${{ matrix.service }}.json
           retention-days: 7
->>>>>>> dev
 
       - name: Push Docker image
         run: docker push ${{ steps.build.outputs.image_uri }}
@@ -226,9 +223,6 @@ jobs:
             echo "No image tag changes to commit"
           else
             git commit -m "ci(${OVERLAY}): update image tags to ${OVERLAY}-${SHORT_SHA} [skip ci]"
-<<<<<<< HEAD
-=======
             git pull --rebase origin "${{ github.ref_name }}"
->>>>>>> dev
             git push origin "${{ github.ref_name }}"
           fi
