@@ -4,55 +4,55 @@ kind: Kustomization
 namespace: petclinic-prod
 
 resources:
-  - ../../base
-  - namespace.yaml
-  - external-secrets/customers-service.yaml
-  - external-secrets/vets-service.yaml
-  - external-secrets/visits-service.yaml
-  - external-secrets/genai-service.yaml
+- ../../base
+- namespace.yaml
+- external-secrets/customers-service.yaml
+- external-secrets/vets-service.yaml
+- external-secrets/visits-service.yaml
+- external-secrets/genai-service.yaml
 
 patches:
-  - path: patches/replicas.yaml
-    target:
-      kind: Deployment
-  - path: patches/zipkin-replicas.yaml
-    target:
-      kind: Deployment
-      name: zipkin
-  - path: patches/resources.yaml
-    target:
-      kind: Deployment
-  - path: patches/tracing-sampling.yaml
-    target:
-      kind: ConfigMap
-      name: tracing-config
+- path: patches/replicas.yaml
+  target:
+    kind: Deployment
+- path: patches/zipkin-replicas.yaml
+  target:
+    kind: Deployment
+    name: zipkin
+- path: patches/resources.yaml
+  target:
+    kind: Deployment
+- path: patches/tracing-sampling.yaml
+  target:
+    kind: ConfigMap
+    name: tracing-config
 
 # Image tags are updated automatically by the CI workflow (replaced with prod-<git-sha>).
 # PLACEHOLDER-update-via-ci tags must never be deployed; CI overwrites them on every push.
 images:
-  - name: config-server
-    newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/config-server
-    newTag: PLACEHOLDER-update-via-ci
-  - name: discovery-server
-    newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/discovery-server
-    newTag: PLACEHOLDER-update-via-ci
-  - name: admin-server
-    newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/admin-server
-    newTag: PLACEHOLDER-update-via-ci
-  - name: api-gateway
-    newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/api-gateway
-    newTag: PLACEHOLDER-update-via-ci
-  - name: customers-service
-    newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/customers-service
-    newTag: PLACEHOLDER-update-via-ci
-  - name: vets-service
-    newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/vets-service
-    newTag: PLACEHOLDER-update-via-ci
-  - name: visits-service
-    newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/visits-service
-    newTag: PLACEHOLDER-update-via-ci
-  - name: genai-service
-    newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/genai-service
-    newTag: PLACEHOLDER-update-via-ci
-  - name: openzipkin/zipkin
-    newTag: "3.4"
+- name: admin-server
+  newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/admin-server
+  newTag: prod-5511f12
+- name: api-gateway
+  newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/api-gateway
+  newTag: prod-5511f12
+- name: config-server
+  newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/config-server
+  newTag: prod-5511f12
+- name: customers-service
+  newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/customers-service
+  newTag: prod-5511f12
+- name: discovery-server
+  newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/discovery-server
+  newTag: prod-5511f12
+- name: genai-service
+  newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/genai-service
+  newTag: prod-5511f12
+- name: openzipkin/zipkin
+  newTag: "3.4"
+- name: vets-service
+  newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/vets-service
+  newTag: prod-5511f12
+- name: visits-service
+  newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/visits-service
+  newTag: prod-5511f12
