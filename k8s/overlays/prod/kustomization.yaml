@@ -26,33 +26,37 @@ patches:
     target:
       kind: ConfigMap
       name: tracing-config
+  - path: patches/config-server-env.yaml
+    target:
+      kind: Deployment
+      name: config-server
 
 # Image tags are updated automatically by the CI workflow (replaced with prod-<git-sha>).
 # PLACEHOLDER-update-via-ci tags must never be deployed; CI overwrites them on every push.
 images:
   - name: config-server
     newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/config-server
-    newTag: PLACEHOLDER-update-via-ci
+    newTag: prod-5511f12
   - name: discovery-server
     newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/discovery-server
-    newTag: PLACEHOLDER-update-via-ci
+    newTag: prod-5511f12
   - name: admin-server
     newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/admin-server
-    newTag: PLACEHOLDER-update-via-ci
+    newTag: prod-5511f12
   - name: api-gateway
     newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/api-gateway
-    newTag: PLACEHOLDER-update-via-ci
+    newTag: prod-5511f12
   - name: customers-service
     newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/customers-service
-    newTag: PLACEHOLDER-update-via-ci
+    newTag: prod-5511f12
   - name: vets-service
     newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/vets-service
-    newTag: PLACEHOLDER-update-via-ci
+    newTag: prod-5511f12
   - name: visits-service
     newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/visits-service
-    newTag: PLACEHOLDER-update-via-ci
+    newTag: prod-5511f12
   - name: genai-service
     newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/genai-service
-    newTag: PLACEHOLDER-update-via-ci
+    newTag: prod-5511f12
   - name: openzipkin/zipkin
     newTag: "3.4"
