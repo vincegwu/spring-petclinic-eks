@@ -31,28 +31,28 @@ patches:
 # PLACEHOLDER-update-via-ci tags must never be deployed; CI overwrites them on every push.
 images:
   - name: config-server
-    newName: ACCOUNT.dkr.ecr.REGION.amazonaws.com/spring-petclinic/config-server
+    newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/config-server
     newTag: PLACEHOLDER-update-via-ci
   - name: discovery-server
-    newName: ACCOUNT.dkr.ecr.REGION.amazonaws.com/spring-petclinic/discovery-server
+    newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/discovery-server
     newTag: PLACEHOLDER-update-via-ci
   - name: admin-server
-    newName: ACCOUNT.dkr.ecr.REGION.amazonaws.com/spring-petclinic/admin-server
+    newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/admin-server
     newTag: PLACEHOLDER-update-via-ci
   - name: api-gateway
-    newName: ACCOUNT.dkr.ecr.REGION.amazonaws.com/spring-petclinic/api-gateway
+    newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/api-gateway
     newTag: PLACEHOLDER-update-via-ci
   - name: customers-service
-    newName: ACCOUNT.dkr.ecr.REGION.amazonaws.com/spring-petclinic/customers-service
+    newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/customers-service
     newTag: PLACEHOLDER-update-via-ci
   - name: vets-service
-    newName: ACCOUNT.dkr.ecr.REGION.amazonaws.com/spring-petclinic/vets-service
+    newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/vets-service
     newTag: PLACEHOLDER-update-via-ci
   - name: visits-service
-    newName: ACCOUNT.dkr.ecr.REGION.amazonaws.com/spring-petclinic/visits-service
+    newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/visits-service
     newTag: PLACEHOLDER-update-via-ci
   - name: genai-service
-    newName: ACCOUNT.dkr.ecr.REGION.amazonaws.com/spring-petclinic/genai-service
+    newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/genai-service
     newTag: PLACEHOLDER-update-via-ci
   - name: openzipkin/zipkin
     newTag: "3.4"
