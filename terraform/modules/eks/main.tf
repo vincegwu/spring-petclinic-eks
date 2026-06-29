@@ -265,7 +265,16 @@ resource "aws_eks_node_group" "this" {
     aws_iam_role_policy_attachment.node_ecr,
   ]
 
-  tags = var.tags
+  # Cluster Autoscaler manages desired_size at runtime — prevent Terraform
+  # from reverting CA's scaling decisions on every apply.
+  lifecycle {
+    ignore_changes = [scaling_config[0].desired_size]
+  }
+
+  tags = merge(var.tags, {
+    "k8s.io/cluster-autoscaler/${var.cluster_name}" = "owned"
+    "k8s.io/cluster-autoscaler/enabled"             = "true"
+  })
 }
 
 # ── OIDC Provider (required for IRSA) ───────────────────────────────────────
@@ -330,6 +339,76 @@ resource "aws_iam_role_policy" "eso_secrets" {
         Condition = {
           StringEquals = {
             "kms:ViaService" = "secretsmanager.${data.aws_region.current.name}.amazonaws.com"
+          }
+        }
+      }
+    ]
+  })
+}
+
+# ── IRSA: Cluster Autoscaler ─────────────────────────────────────────────────
+data "aws_iam_policy_document" "cluster_autoscaler_assume" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    effect  = "Allow"
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.this.arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_iam_openid_connect_provider.this.url, "https://", "")}:sub"
+      values   = ["system:serviceaccount:kube-system:cluster-autoscaler"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_iam_openid_connect_provider.this.url, "https://", "")}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "cluster_autoscaler" {
+  name               = "${var.cluster_name}-cluster-autoscaler-role"
+  assume_role_policy = data.aws_iam_policy_document.cluster_autoscaler_assume.json
+  tags               = var.tags
+}
+
+resource "aws_iam_role_policy" "cluster_autoscaler" {
+  name = "cluster-autoscaler"
+  role = aws_iam_role.cluster_autoscaler.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "ReadOnly"
+        Effect = "Allow"
+        Action = [
+          "autoscaling:DescribeAutoScalingGroups",
+          "autoscaling:DescribeAutoScalingInstances",
+          "autoscaling:DescribeLaunchConfigurations",
+          "autoscaling:DescribeScalingActivities",
+          "autoscaling:DescribeTags",
+          "ec2:DescribeLaunchTemplateVersions",
+          "ec2:DescribeImages",
+          "ec2:DescribeInstanceTypes",
+          "ec2:GetInstanceTypesFromInstanceRequirements",
+          "eks:DescribeNodegroup",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "ScaleNodeGroup"
+        Effect = "Allow"
+        Action = [
+          "autoscaling:SetDesiredCapacity",
+          "autoscaling:TerminateInstanceInAutoScalingGroup",
+        ]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "aws:ResourceTag/k8s.io/cluster-autoscaler/${var.cluster_name}" = "owned"
           }
         }
       }

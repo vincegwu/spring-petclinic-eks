@@ -28,3 +28,8 @@ output "eso_role_arn" {
   value       = aws_iam_role.eso.arn
 }
 
+output "cluster_autoscaler_role_arn" {
+  description = "IRSA role ARN for the Cluster Autoscaler"
+  value       = aws_iam_role.cluster_autoscaler.arn
+}
+

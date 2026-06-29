@@ -146,6 +146,31 @@ module "rds_genai" {
   tags                       = local.tags
 }
 
+# ── Node → RDS egress rules ───────────────────────────────────────────────────
+# The node SG only allows egress to itself (node-to-node), HTTPS, and DNS.
+# Without these rules pods cannot open TCP 3306 connections to RDS even though
+# the RDS SGs already allow inbound from the node SG.
+locals {
+  rds_security_group_ids = {
+    customers = module.rds_customers.security_group_id
+    vets      = module.rds_vets.security_group_id
+    visits    = module.rds_visits.security_group_id
+    genai     = module.rds_genai.security_group_id
+  }
+}
+
+resource "aws_security_group_rule" "nodes_to_rds" {
+  for_each = local.rds_security_group_ids
+
+  type                     = "egress"
+  description              = "MySQL to ${each.key} RDS"
+  from_port                = 3306
+  to_port                  = 3306
+  protocol                 = "tcp"
+  security_group_id        = module.eks.node_security_group_id
+  source_security_group_id = each.value
+}
+
 # ── KMS key for application secrets ─────────────────────────────────────────
 resource "aws_kms_key" "secrets" {
   description             = "KMS key for application secrets (${local.env})"
@@ -203,6 +228,70 @@ resource "kubernetes_storage_class" "gp3" {
   parameters = {
     type      = "gp3"
     encrypted = "true"
+  }
+
+  depends_on = [module.eks]
+}
+
+# ── metrics-server (required by HPA for CPU/memory metrics) ──────────────────
+resource "helm_release" "metrics_server" {
+  name       = "metrics-server"
+  repository = "https://kubernetes-sigs.github.io/metrics-server/"
+  chart      = "metrics-server"
+  version    = "3.13.1"
+  namespace  = "kube-system"
+
+  set {
+    name  = "args[0]"
+    value = "--kubelet-insecure-tls"
+  }
+
+  depends_on = [module.eks]
+}
+
+# ── Cluster Autoscaler ────────────────────────────────────────────────────────
+resource "helm_release" "cluster_autoscaler" {
+  name       = "cluster-autoscaler"
+  repository = "https://kubernetes.github.io/autoscaler"
+  chart      = "cluster-autoscaler"
+  version    = "9.58.0"
+  namespace  = "kube-system"
+
+  set {
+    name  = "autoDiscovery.clusterName"
+    value = var.cluster_name
+  }
+  set {
+    name  = "awsRegion"
+    value = var.aws_region
+  }
+  set {
+    name  = "rbac.serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
+    value = module.eks.cluster_autoscaler_role_arn
+  }
+  set {
+    name  = "extraArgs.balance-similar-node-groups"
+    value = "true"
+  }
+  set {
+    name  = "extraArgs.skip-nodes-with-local-storage"
+    value = "false"
+  }
+  set {
+    name  = "extraArgs.expander"
+    value = "least-waste"
+  }
+  set {
+    name  = "extraArgs.scale-down-enabled"
+    value = "true"
+  }
+  set {
+    name  = "extraArgs.scale-down-delay-after-add"
+    value = "10m0s"
+  }
+  set {
+    name  = "extraArgs.scale-down-unneeded-time"
+    value = "10m0s"
   }
 
   depends_on = [module.eks]
@@ -355,7 +444,7 @@ resource "helm_release" "argocd" {
   name             = "argocd"
   repository       = "https://argoproj.github.io/argo-helm"
   chart            = "argo-cd"
-  version          = "7.7.21"
+  version          = "8.6.4"
   namespace        = "argocd"
   create_namespace = true
 
@@ -370,6 +459,12 @@ resource "helm_release" "argocd" {
       configs = {
         params = {
           "server.insecure" = true
+        }
+        cm = {
+          # Prevents schema validation errors on K8s 1.35 fields not yet in
+          # older ArgoCD bundled schemas (e.g. .status.terminatingReplicas).
+          # Safe to remove once ArgoCD natively bundles the K8s 1.35 schema.
+          "resource.compareoptions" = "ignoreResourceStatusField: all"
         }
       }
     })
@@ -417,6 +512,13 @@ resource "kubectl_manifest" "argocd_app" {
         server    = "https://kubernetes.default.svc"
         namespace = "petclinic-${local.env}"
       }
+      ignoreDifferences = [
+        {
+          group         = "apps"
+          kind          = "Deployment"
+          jsonPointers  = ["/spec/replicas"]
+        }
+      ]
       syncPolicy = {
         automated = {
           prune      = true
@@ -428,6 +530,7 @@ resource "kubectl_manifest" "argocd_app" {
           "PrunePropagationPolicy=foreground",
           "PruneLast=true",
           "ServerSideApply=true",
+          "RespectIgnoreDifferences=true",
         ]
         retry = {
           limit = 3

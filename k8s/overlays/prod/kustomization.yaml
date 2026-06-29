@@ -10,6 +10,7 @@ resources:
 - external-secrets/vets-service.yaml
 - external-secrets/visits-service.yaml
 - external-secrets/genai-service.yaml
+- hpa/hpa.yaml
 
 patches:
 - path: patches/replicas.yaml
