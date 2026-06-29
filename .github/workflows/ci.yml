@@ -6,10 +6,7 @@ on:
       - dev
       - main
     paths:
-<<<<<<< HEAD
-=======
       - "upstream"
->>>>>>> dev
       - "upstream/**"
       - ".github/workflows/ci.yml"
   workflow_dispatch: {}
