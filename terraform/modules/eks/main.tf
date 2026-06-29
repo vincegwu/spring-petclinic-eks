@@ -358,7 +358,7 @@ data "aws_iam_policy_document" "cluster_autoscaler_assume" {
     condition {
       test     = "StringEquals"
       variable = "${replace(aws_iam_openid_connect_provider.this.url, "https://", "")}:sub"
-      values   = ["system:serviceaccount:kube-system:cluster-autoscaler"]
+      values   = ["system:serviceaccount:kube-system:cluster-autoscaler-aws-cluster-autoscaler"]
     }
     condition {
       test     = "StringEquals"
