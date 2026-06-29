@@ -38,6 +38,12 @@ variable "rds_instance_class" {
   default = "db.t3.small"
 }
 
+variable "extra_cluster_admin_arns" {
+  description = "IAM principal ARNs always granted EKS cluster-admin access, regardless of which identity runs terraform apply (e.g. developers who need kubectl access)"
+  type        = list(string)
+  default     = ["arn:aws:iam::205930623242:user/egwu"]
+}
+
 variable "github_repo_url" {
   description = "Full HTTPS URL of the GitHub repository — used by ArgoCD to poll for changes"
   type        = string
