@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  labels:
+    app: api-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      initContainers:
+        - name: wait-discovery-server
+          image: curlimages/curl:8.5.0
+          command:
+            - sh
+            - -c
+            - |
+              until curl -sf http://discovery-server:8761/actuator/health; do
+                echo "waiting for discovery-server"; sleep 3
+              done
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 100
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        - name: api-gateway
+          image: api-gateway:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: JAVA_OPTS
+              value: "-XX:MaxRAMPercentage=75.0"
+            - name: CONFIG_SERVER_URL
+              value: "http://config-server:8888"
+            - name: MANAGEMENT_ZIPKIN_TRACING_ENDPOINT
+              value: "http://zipkin:9411/api/v2/spans"
+            - name: MANAGEMENT_TRACING_SAMPLING_PROBABILITY
+              valueFrom:
+                configMapKeyRef:
+                  name: tracing-config
+                  key: sampling.probability
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "150m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 40
+            periodSeconds: 10
+      volumes:
+        - name: tmp
+          emptyDir: {}

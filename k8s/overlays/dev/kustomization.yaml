@@ -1,0 +1,59 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: petclinic-dev
+
+resources:
+- ../../base
+- namespace.yaml
+- external-secrets/customers-service.yaml
+- external-secrets/vets-service.yaml
+- external-secrets/visits-service.yaml
+- external-secrets/genai-service.yaml
+
+patches:
+- path: patches/replicas.yaml
+  target:
+    kind: Deployment
+- path: patches/resources.yaml
+  target:
+    kind: Deployment
+- path: patches/zipkin-service.yaml
+  target:
+    kind: Service
+    name: zipkin
+- path: patches/config-server-env.yaml
+  target:
+    kind: Deployment
+    name: config-server
+
+# Image tags are updated automatically by the CI workflow (replaced with dev-<git-sha>).
+# Replace ACCOUNT and REGION once after running `terraform apply` on dev.
+# PLACEHOLDER-update-via-ci tags must never be deployed; CI overwrites them on every push.
+images:
+- name: admin-server
+  newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/admin-server
+  newTag: dev-68e169a
+- name: api-gateway
+  newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/api-gateway
+  newTag: dev-68e169a
+- name: config-server
+  newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/config-server
+  newTag: dev-68e169a
+- name: customers-service
+  newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/customers-service
+  newTag: dev-68e169a
+- name: discovery-server
+  newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/discovery-server
+  newTag: dev-68e169a
+- name: genai-service
+  newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/genai-service
+  newTag: dev-68e169a
+- name: openzipkin/zipkin
+  newTag: "3.4"
+- name: vets-service
+  newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/vets-service
+  newTag: dev-68e169a
+- name: visits-service
+  newName: 205930623242.dkr.ecr.us-east-1.amazonaws.com/spring-petclinic/visits-service
+  newTag: dev-68e169a

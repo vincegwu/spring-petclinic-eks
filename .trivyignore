@@ -1,0 +1,20 @@
+# Trivy vulnerability suppressions
+#
+# Add CVE IDs here (one per line) for findings that are confirmed false positives
+# or accepted risks after review. Always include a comment explaining why.
+#
+# Format:
+#   CVE-YYYY-NNNNN   # reason — reviewed by <who> on <date>
+#
+# Example:
+#   CVE-2023-2976    # guava: affects server-side RPC only; not used in this app
+
+CVE-2026-41712  # spring-ai-client-chat / spring-ai-model 2.0.0-M1 in genai-service.
+                # Fix requires upgrading spring-ai-bom to 2.0.0-M6, which renamed the starter
+                # artifacts (spring-ai-starter-model-azure-openai no longer in BOM). Full
+                # Spring AI migration needs to be done as a dedicated task before removing this.
+
+CVE-2026-2100   # p11-kit / p11-kit-trust in eclipse-temurin Alpine base image.
+                # p11-kit is a PKCS#11 hardware-token broker (smart cards/HSMs).
+                # This Spring Boot app does not use PKCS#11 so the vulnerability
+                # is not reachable; fix (0.26.2-r0) is not yet in Alpine 3.23.

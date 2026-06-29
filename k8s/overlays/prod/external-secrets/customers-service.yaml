@@ -1,0 +1,25 @@
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: customers-service-db-secret
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+  target:
+    name: customers-service-db-secret
+    creationPolicy: Owner
+  data:
+    - secretKey: url
+      remoteRef:
+        key: petclinic/prod/customers-service/db
+        property: url
+    - secretKey: username
+      remoteRef:
+        key: petclinic/prod/customers-service/db
+        property: username
+    - secretKey: password
+      remoteRef:
+        key: petclinic/prod/customers-service/db
+        property: password

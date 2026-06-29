@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: petclinic-dev
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    # Notify on sync success/failure — configure ArgoCD notifications separately
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: dev-deployments
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: dev-deployments
+spec:
+  project: default
+  source:
+    # This file is a reference only — the live Application is created by Terraform using var.github_repo_url.
+    # If applying manually, replace YOUR_GITHUB_ORG with your actual GitHub org/username.
+    repoURL: https://github.com/YOUR_GITHUB_ORG/spring-petclinic-eks.git
+    targetRevision: dev
+    path: k8s/overlays/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: petclinic-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+  revisionHistoryLimit: 5

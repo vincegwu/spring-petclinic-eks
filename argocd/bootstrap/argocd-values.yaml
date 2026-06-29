@@ -1,0 +1,54 @@
+global:
+  domain: ""  # Set to your domain if using ingress
+
+server:
+  service:
+    type: NodePort
+    nodePortHttp: 30880
+
+configs:
+  params:
+    server.insecure: true  # Access is HTTP-only via node public IP on port 30880
+
+  cm:
+    # Allow ArgoCD to manage resources in all namespaces
+    application.resourceTrackingMethod: annotation
+    resource.customizations.health.external-secrets.io_ExternalSecret: |
+      hs = {}
+      if obj.status ~= nil then
+        if obj.status.conditions ~= nil then
+          for i, condition in ipairs(obj.status.conditions) do
+            if condition.type == "Ready" and condition.status == "False" then
+              hs.status = "Degraded"
+              hs.message = condition.message
+              return hs
+            end
+            if condition.type == "Ready" and condition.status == "True" then
+              hs.status = "Healthy"
+              hs.message = condition.message
+              return hs
+            end
+          end
+        end
+      end
+      hs.status = "Progressing"
+      hs.message = "Waiting for ExternalSecret to sync"
+      return hs
+
+repoServer:
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+applicationSet:
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"

@@ -1,0 +1,15 @@
+# ArgoCD installation via Helm — apply once per cluster after EKS is provisioned.
+# Usage:
+#   aws eks update-kubeconfig --region us-east-1 --name petclinic-dev
+#   kubectl apply -f argocd/bootstrap/argocd-install.yaml
+#
+# Then register the ArgoCD Application:
+#   kubectl apply -f argocd/dev/petclinic-dev.yaml   (dev cluster)
+#   kubectl apply -f argocd/prod/petclinic-prod.yaml (prod cluster)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+---
+# Install via: helm repo add argo https://argoproj.github.io/argo-helm
+#              helm install argocd argo/argo-cd -n argocd -f argocd/bootstrap/argocd-values.yaml

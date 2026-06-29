@@ -6,6 +6,10 @@ on:
       - dev
       - main
     paths:
+<<<<<<< HEAD
+=======
+      - "upstream"
+>>>>>>> dev
       - "upstream/**"
       - ".github/workflows/ci.yml"
   workflow_dispatch: {}
@@ -121,6 +125,31 @@ jobs:
           exit-code: '1'
           severity: HIGH,CRITICAL
           ignore-unfixed: true
+<<<<<<< HEAD
+=======
+          trivy-version: "0.71.2"
+          trivyignores: ".trivyignore"
+
+      - name: Export Trivy findings as JSON (on scan failure)
+        if: failure()
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.build.outputs.image_uri }}
+          format: json
+          output: trivy-${{ matrix.service }}.json
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivy-version: "0.71.2"
+          trivyignores: ".trivyignore"
+
+      - name: Upload Trivy JSON report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report-${{ matrix.service }}
+          path: trivy-${{ matrix.service }}.json
+          retention-days: 7
+>>>>>>> dev
 
       - name: Push Docker image
         run: docker push ${{ steps.build.outputs.image_uri }}
@@ -200,5 +229,9 @@ jobs:
             echo "No image tag changes to commit"
           else
             git commit -m "ci(${OVERLAY}): update image tags to ${OVERLAY}-${SHORT_SHA} [skip ci]"
+<<<<<<< HEAD
+=======
+            git pull --rebase origin "${{ github.ref_name }}"
+>>>>>>> dev
             git push origin "${{ github.ref_name }}"
           fi

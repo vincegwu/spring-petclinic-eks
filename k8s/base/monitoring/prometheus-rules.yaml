@@ -1,0 +1,85 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: spring-petclinic-alerts
+  labels:
+    app: spring-petclinic
+spec:
+  groups:
+    - name: petclinic.availability
+      interval: 30s
+      rules:
+        - alert: ServiceDown
+          expr: up{job=~"petclinic-.*|.*-service|api-gateway|config-server|discovery-server|admin-server"} == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Service {{ $labels.job }} is down"
+            description: "{{ $labels.job }} has been unreachable for more than 1 minute."
+
+        - alert: PodCrashLooping
+          expr: rate(kube_pod_container_status_restarts_total{namespace=~"petclinic-.*"}[15m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod {{ $labels.pod }} is crash-looping"
+            description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has restarted more than once in 15 minutes."
+
+    - name: petclinic.performance
+      interval: 60s
+      rules:
+        - alert: HighRequestLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(http_server_requests_seconds_bucket{namespace=~"petclinic-.*"}[5m])) by (le, service, uri)
+            ) > 2
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High latency on {{ $labels.service }} — {{ $labels.uri }}"
+            description: "P95 latency is {{ $value | humanizeDuration }} (threshold: 2s)."
+
+        - alert: HighErrorRate
+          expr: |
+            sum(rate(http_server_requests_seconds_count{namespace=~"petclinic-.*", status=~"5.."}[5m])) by (service)
+            /
+            sum(rate(http_server_requests_seconds_count{namespace=~"petclinic-.*"}[5m])) by (service)
+            > 0.05
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "High error rate on {{ $labels.service }}"
+            description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)."
+
+    - name: petclinic.jvm
+      interval: 60s
+      rules:
+        - alert: HighJVMMemoryUsage
+          expr: |
+            jvm_memory_used_bytes{namespace=~"petclinic-.*", area="heap"}
+            /
+            jvm_memory_max_bytes{namespace=~"petclinic-.*", area="heap"}
+            > 0.90
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High JVM heap usage in {{ $labels.pod }}"
+            description: "JVM heap is {{ $value | humanizePercentage }} full in pod {{ $labels.pod }}."
+
+        - alert: JVMGCPressure
+          expr: |
+            rate(jvm_gc_pause_seconds_sum{namespace=~"petclinic-.*"}[5m])
+            /
+            rate(jvm_gc_pause_seconds_count{namespace=~"petclinic-.*"}[5m])
+            > 0.5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High GC pause time in {{ $labels.pod }}"
+            description: "Average GC pause is {{ $value | humanizeDuration }} (threshold: 500ms)."

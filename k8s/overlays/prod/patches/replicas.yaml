@@ -1,0 +1,4 @@
+# Prod: 2 replicas for HA on all services
+- op: replace
+  path: /spec/replicas
+  value: 2

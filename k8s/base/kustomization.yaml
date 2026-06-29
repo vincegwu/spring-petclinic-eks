@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  # Infrastructure services (no database)
+  - config-server/deployment.yaml
+  - config-server/service.yaml
+  - discovery-server/deployment.yaml
+  - discovery-server/service.yaml
+  - admin-server/deployment.yaml
+  - admin-server/service.yaml
+  - api-gateway/deployment.yaml
+  - api-gateway/service.yaml
+  # Data services (ExternalSecrets with env-specific keys live in overlays)
+  - customers-service/deployment.yaml
+  - customers-service/service.yaml
+  - vets-service/deployment.yaml
+  - vets-service/service.yaml
+  - visits-service/deployment.yaml
+  - visits-service/service.yaml
+  - genai-service/deployment.yaml
+  - genai-service/service.yaml
+  # Monitoring & tracing
+  - monitoring/tracing-config.yaml
+  - monitoring/service-monitors.yaml
+  - monitoring/prometheus-rules.yaml
+  - monitoring/zipkin/deployment.yaml
+  - monitoring/zipkin/service.yaml

@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: petclinic-prod
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: prod-deployments
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: prod-deployments
+spec:
+  project: default
+  source:
+    # This file is a reference only — the live Application is created by Terraform using var.github_repo_url.
+    # If applying manually, replace YOUR_GITHUB_ORG with your actual GitHub org/username.
+    repoURL: https://github.com/YOUR_GITHUB_ORG/spring-petclinic-eks.git
+    targetRevision: main
+    path: k8s/overlays/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: petclinic-prod
+  syncPolicy:
+    automated:
+      prune: true
+      # selfHeal is false for prod — manual intervention required if drift is detected
+      selfHeal: false
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
+  revisionHistoryLimit: 10

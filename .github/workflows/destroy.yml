@@ -55,6 +55,67 @@ jobs:
         working-directory: terraform/environments/${{ inputs.environment }}
         run: terraform init -input=false
 
+<<<<<<< HEAD
+=======
+      - name: Clean up orphaned VPC ENIs
+        run: |
+          CLUSTER_NAME="petclinic-${{ inputs.environment }}"
+
+          VPC_ID=$(aws ec2 describe-vpcs \
+            --filters "Name=tag:Name,Values=${CLUSTER_NAME}-vpc" \
+            --query "Vpcs[0].VpcId" \
+            --output text)
+
+          if [[ "$VPC_ID" == "None" || -z "$VPC_ID" ]]; then
+            echo "No VPC found for ${CLUSTER_NAME}, skipping ENI cleanup."
+            exit 0
+          fi
+          echo "VPC: $VPC_ID"
+
+          # Delete available (detached) ENIs — left behind by VPC CNI after node termination
+          AVAILABLE=$(aws ec2 describe-network-interfaces \
+            --filters "Name=vpc-id,Values=${VPC_ID}" "Name=status,Values=available" \
+            --query "NetworkInterfaces[*].NetworkInterfaceId" \
+            --output text)
+          for ENI_ID in $AVAILABLE; do
+            echo "Deleting available ENI: $ENI_ID"
+            aws ec2 delete-network-interface --network-interface-id "$ENI_ID" || true
+          done
+
+          # Detach and delete in-use ENIs not attached to an EC2 instance (e.g. lingering CNI ENIs)
+          # Only consider ENIs owned by this account — EKS control-plane and other service-owned
+          # ENIs have a different InstanceOwnerId and cannot be detached (AuthFailure).
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          IN_USE=$(aws ec2 describe-network-interfaces \
+            --filters "Name=vpc-id,Values=${VPC_ID}" "Name=status,Values=in-use" \
+            --query "NetworkInterfaces[?Attachment.InstanceOwnerId=='${ACCOUNT_ID}'].NetworkInterfaceId" \
+            --output text)
+          for ENI_ID in $IN_USE; do
+            INSTANCE_ID=$(aws ec2 describe-network-interfaces \
+              --network-interface-ids "$ENI_ID" \
+              --query "NetworkInterfaces[0].Attachment.InstanceId" \
+              --output text)
+            # Skip ENIs still attached to a live EC2 instance (Terraform will terminate those)
+            if [[ "$INSTANCE_ID" != "None" && -n "$INSTANCE_ID" ]]; then
+              echo "Skipping ENI $ENI_ID — attached to instance $INSTANCE_ID"
+              continue
+            fi
+            ATTACHMENT_ID=$(aws ec2 describe-network-interfaces \
+              --network-interface-ids "$ENI_ID" \
+              --query "NetworkInterfaces[0].Attachment.AttachmentId" \
+              --output text)
+            if [[ "$ATTACHMENT_ID" != "None" && -n "$ATTACHMENT_ID" ]]; then
+              echo "Detaching ENI $ENI_ID (attachment $ATTACHMENT_ID)"
+              aws ec2 detach-network-interface --attachment-id "$ATTACHMENT_ID" --force || true
+              sleep 5
+            fi
+            echo "Deleting in-use ENI: $ENI_ID"
+            aws ec2 delete-network-interface --network-interface-id "$ENI_ID" || true
+          done
+
+          echo "ENI cleanup complete."
+
+>>>>>>> dev
       - name: Terraform Destroy
         working-directory: terraform/environments/${{ inputs.environment }}
         env:

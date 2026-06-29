@@ -1,0 +1,15 @@
+# External Secrets Operator installation.
+# Run after EKS is ready and BEFORE applying ArgoCD applications.
+#
+# Usage:
+#   helm repo add external-secrets https://charts.external-secrets.io
+#   helm install external-secrets external-secrets/external-secrets \
+#     -n external-secrets --create-namespace \
+#     -f argocd/bootstrap/eso-values.yaml
+#
+# The ClusterSecretStore is created automatically by Terraform (kubernetes_manifest.cluster_secret_store).
+# No separate manifest needs to be applied.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: external-secrets

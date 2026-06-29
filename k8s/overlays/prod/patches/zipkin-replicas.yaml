@@ -1,0 +1,6 @@
+# Zipkin uses in-memory storage: multiple replicas split the trace store
+# across pods, making the UI show only a fraction of traces. Pin to 1.
+# To run Zipkin HA in prod, migrate to STORAGE_TYPE=elasticsearch first.
+- op: replace
+  path: /spec/replicas
+  value: 1
