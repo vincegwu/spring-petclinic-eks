@@ -29,7 +29,7 @@ locals {
         text          = "{{ range .Alerts }}*Alert:* {{ .Annotations.summary }}\n*Description:* {{ .Annotations.description }}\n*Severity:* {{ .Labels.severity }}\n{{ end }}"
       }]
     }
-  ] : [{ name = "null" }]
+  ] : [{ name = "null", slack_configs = [] }]
 
   alertmanager_route_receiver = var.alertmanager_slack_webhook_url != "" ? "slack-notifications" : "null"
 
