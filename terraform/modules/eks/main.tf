@@ -419,7 +419,7 @@ resource "aws_iam_role_policy" "cluster_autoscaler" {
           "autoscaling:SetDesiredCapacity",
           "autoscaling:TerminateInstanceInAutoScalingGroup",
         ]
-        Resource = "*"
+        Resource = "arn:aws:autoscaling:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:autoScalingGroup:*:autoScalingGroupName/*"
         Condition = {
           StringEquals = {
             "aws:ResourceTag/k8s.io/cluster-autoscaler/${var.cluster_name}" = "owned"
