@@ -408,9 +408,16 @@ resource "aws_iam_role_policy" "cluster_autoscaler" {
           "ec2:DescribeImages",
           "ec2:DescribeInstanceTypes",
           "ec2:GetInstanceTypesFromInstanceRequirements",
-          "eks:DescribeNodegroup",
         ]
         Resource = "*"
+      },
+      {
+        Sid    = "DescribeNodegroup"
+        Effect = "Allow"
+        Action = [
+          "eks:DescribeNodegroup",
+        ]
+        Resource = "arn:aws:eks:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:nodegroup/${var.cluster_name}/*/*"
       },
       {
         Sid    = "ScaleNodeGroup"
