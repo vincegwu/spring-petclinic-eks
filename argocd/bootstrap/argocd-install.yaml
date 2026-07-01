@@ -1,5 +1,10 @@
-# ArgoCD installation via Helm — apply once per cluster after EKS is provisioned.
-# Usage:
+# NOTE: In prod/dev, Terraform (helm_release.argocd in terraform/environments/*/main.tf)
+# is authoritative and installs ArgoCD with its own inline Helm values plus an ALB
+# Ingress. This file + argocd-values.yaml is a manual fallback for bootstrapping
+# ArgoCD by hand on a cluster Terraform doesn't manage — keep argocd-values.yaml in
+# sync with the values block in main.tf if that ever changes.
+#
+# Manual usage:
 #   aws eks update-kubeconfig --region us-east-1 --name petclinic-dev
 #   kubectl apply -f argocd/bootstrap/argocd-install.yaml
 #

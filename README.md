@@ -83,7 +83,7 @@ A push to either branch triggers the full CI/CD pipeline automatically. Pull req
 |---|---|
 | `bootstrap/` | S3 state bucket, DynamoDB lock table, GitHub Actions OIDC provider, `github-actions-dev` + `github-actions-prod` IAM roles — **run once manually before anything else** |
 | `modules/vpc` | VPC (10.0/10.1.0.0/16), 3 public + 3 private subnets across AZs, Internet Gateway, route tables (no NAT — nodes are in public subnets; private subnets are RDS-only with no egress) |
-| `modules/eks` | EKS cluster (Kubernetes 1.35), managed node group (in public subnets for IGW-based NodePort access), OIDC provider, IRSA roles for External Secrets Operator and EBS CSI driver, CoreDNS / kube-proxy / VPC CNI / EBS CSI add-ons |
+| `modules/eks` | EKS cluster (Kubernetes 1.35), managed node group (in public subnets — dev still reaches services directly via IGW/NodePort; prod fronts internet-facing services with an ALB instead), OIDC provider, IRSA roles for External Secrets Operator, EBS CSI driver, and the AWS Load Balancer Controller (`modules/eks/policies/lbc-policy.json`), CoreDNS / kube-proxy / VPC CNI / EBS CSI add-ons |
 | `modules/ecr` | 8 ECR repositories under `spring-petclinic/<service>`, lifecycle policy (30 tagged / expire untagged after 7 days), push permissions for GitHub Actions |
 | `modules/rds` | RDS MySQL 8.0 per data service — random 24-char password, Secrets Manager secret, private subnet group, security group (port 3306 from EKS nodes only), Multi-AZ and deletion protection enabled in prod |
 | `environments/dev` (and `prod`) | In addition to wiring modules: four `aws_security_group_rule` egress resources that open TCP 3306 from the EKS node SG to each RDS SG. The RDS module adds the corresponding inbound rule; both sides are required because node SG egress is otherwise restricted to HTTPS and DNS. |
@@ -109,7 +109,14 @@ k8s/
 └── overlays/
     ├── dev/            # dev namespace, 1 replica, dev image tags, dev ExternalSecrets
     └── prod/           # prod namespace, 2 replicas, prod image tags, prod ExternalSecrets
+        ├── ingress/         # ALB Ingress for api-gateway (internet-facing, ACM/HTTPS)
+        ├── networkpolicies/ # Default-deny + explicit allows (DNS, HTTPS, intra-namespace,
+        │                    #   ALB→api-gateway, Prometheus scrape)
+        ├── pdb/             # PodDisruptionBudget (minAvailable: 1) per service
+        └── patches/api-gateway-service.yaml  # api-gateway Service: ClusterIP (ALB uses IP-mode targets, not NodePort)
 ```
+
+Prod is the only environment with an Ingress, NetworkPolicies, and PDBs today — dev still relies on plain NodePort Services with no network policy enforcement.
 
 Database credentials and the Azure OpenAI credentials are injected from Kubernetes secrets that are kept in sync with AWS Secrets Manager by **External Secrets Operator** (ESO). Each overlay contains `ExternalSecret` resources referencing `petclinic/<env>/<service>/db` (database) and `petclinic/<env>/genai-service/azure-openai` (API key + endpoint) in Secrets Manager.
 
@@ -122,6 +129,8 @@ ArgoCD runs inside the EKS cluster in the `argocd` namespace and watches the Git
 | `petclinic-dev` | `k8s/overlays/dev` on branch `dev` | `petclinic-dev` | Yes, with self-heal |
 | `petclinic-prod` | `k8s/overlays/prod` on branch `main` | `petclinic-prod` | Yes, manual approval for drift |
 
+**Access:** Dev exposes the ArgoCD UI via NodePort 30880. Prod runs ArgoCD's `service` as `ClusterIP` and instead fronts it with a dedicated internet-facing ALB Ingress (`kubectl_manifest.argocd_ingress` in `terraform/environments/prod/main.tf`) — TLS terminated at the ALB with the same ACM certificate used for `api-gateway`, HTTP internally. See [DEPLOYMENT.md](./DEPLOYMENT.md#accessing-services).
+
 ### Monitoring (`monitoring` namespace)
 
 Prometheus, Grafana, and AlertManager are installed by Terraform via the **kube-prometheus-stack** Helm chart. Zipkin distributed tracing runs alongside the application services.
@@ -129,7 +138,7 @@ Prometheus, Grafana, and AlertManager are installed by Terraform via the **kube-
 | Component | Description |
 |---|---|
 | **Prometheus** | Scrapes all services via `ServiceMonitor` CRDs. Discovers monitors across all namespaces including `petclinic-dev` and `petclinic-prod` |
-| **Grafana** | Pre-loaded dashboards: JVM Micrometer (gnetId 4701) and Spring Boot Statistics (gnetId 11955). Exposed as NodePort 30300 in dev, ClusterIP in prod |
+| **Grafana** | Pre-loaded dashboards: JVM Micrometer (gnetId 4701) and Spring Boot Statistics (gnetId 11955). Exposed as NodePort 30300 in dev; in prod, `ClusterIP` fronted by an ALB Ingress (`kubectl_manifest.grafana_ingress` in `terraform/environments/prod/main.tf`) that shares the api-gateway ALB via an IngressGroup, routed by hostname |
 | **AlertManager** | Ships with the kube-prometheus-stack. Rules cover service availability, P95 latency >2 s, error rate >5%, JVM heap >90%, and GC pause >500 ms |
 | **Zipkin** | In-memory tracing server. All 8 services send spans via `MANAGEMENT_ZIPKIN_TRACING_ENDPOINT`. Sampling: 100% dev, 10% prod |
 
@@ -198,6 +207,7 @@ spring-petclinic-eks/
 │   ├── modules/
 │   │   ├── vpc/                       # VPC, subnets, NAT
 │   │   ├── eks/                       # EKS cluster, node group, IRSA roles
+│   │   │   └── policies/lbc-policy.json   # IAM policy for the AWS Load Balancer Controller
 │   │   ├── ecr/                       # ECR repositories
 │   │   └── rds/                       # RDS MySQL + Secrets Manager secret
 │   └── environments/
@@ -217,7 +227,8 @@ spring-petclinic-eks/
 │   │   └── monitoring/               # Zipkin, ServiceMonitors, PrometheusRules, tracing ConfigMap
 │   └── overlays/
 │       ├── dev/                       # Dev: namespace, images, 1 replica, ExternalSecrets, Zipkin NodePort
-│       └── prod/                      # Prod: namespace, images, 2 replicas, ExternalSecrets, 10% sampling
+│       └── prod/                      # Prod: namespace, images, 2 replicas, ExternalSecrets, 10% sampling,
+│                                       #   ALB Ingress, NetworkPolicies, PodDisruptionBudgets
 │
 ├── argocd/
 │   ├── dev/petclinic-dev.yaml         # ArgoCD Application reference (created by Terraform)
@@ -309,7 +320,7 @@ Services will be available at:
 | CD | ArgoCD (GitOps, Kustomize) |
 | Secrets | AWS Secrets Manager + External Secrets Operator (both configured by Terraform) |
 | Databases | AWS RDS MySQL 8.0 (one instance per data service) |
-| Networking | AWS VPC, Internet Gateway, NodePort services (nodes in public subnets — no load balancer) |
+| Networking | AWS VPC, Internet Gateway, nodes in public subnets. Dev: NodePort services only. Prod: AWS Load Balancer Controller + ALB Ingress (HTTPS via ACM) for `api-gateway` + Grafana (shared ALB, host-routed) and ArgoCD (dedicated ALB), NetworkPolicies (default-deny), PodDisruptionBudgets |
 | Service discovery | Netflix Eureka |
 | Observability | Micrometer, Prometheus, Grafana, Zipkin |
 

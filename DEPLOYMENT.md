@@ -22,6 +22,11 @@ Running `terraform apply` across the two stages below provisions and configures 
 | ArgoCD | `helm_release.argocd` |
 | ArgoCD Application (petclinic-dev/prod) | `kubernetes_manifest.argocd_app` |
 | Prometheus + Grafana + AlertManager | `helm_release.kube_prometheus_stack` |
+| AWS Load Balancer Controller (**prod only**) | `helm_release.aws_load_balancer_controller` in `terraform/environments/prod/main.tf` |
+| ArgoCD ALB Ingress, HTTPS via ACM, dedicated ALB (**prod only**) | `kubectl_manifest.argocd_ingress` in `terraform/environments/prod/main.tf` |
+| Grafana ALB Ingress, HTTPS via ACM, shares the api-gateway ALB (**prod only**) | `kubectl_manifest.grafana_ingress` in `terraform/environments/prod/main.tf` |
+
+> Dev has no AWS Load Balancer Controller and no ALB Ingress for ArgoCD/Grafana — it stays on plain NodePort. The `api-gateway` ALB Ingress (also prod-only) is a Kustomize-managed Kubernetes manifest (`k8s/overlays/prod/ingress/api-gateway.yaml`), not Terraform, so ArgoCD applies it as part of the normal GitOps sync — it isn't in the table above. Grafana's Ingress joins the same `IngressGroup` (`alb.ingress.kubernetes.io/group.name: petclinic-prod`) as api-gateway's, so they share one ALB and are routed by hostname rather than each getting a separate ALB.
 
 ---
 
@@ -151,6 +156,8 @@ In your repository → **Settings → Secrets and variables → Actions**, add t
 | `AZURE_OPENAI_ENDPOINT` | Your Azure OpenAI endpoint URL (e.g. `https://<resource-name>.openai.azure.com/`) |
 | `GH_PAT` | A GitHub Personal Access Token with `repo` write scope — needed for CI to commit updated image tags back to the branch |
 | `GRAFANA_ADMIN_PASSWORD` | Initial Grafana admin password — set to any strong password |
+| `ACM_CERT_ARN` | ARN of an ACM certificate covering your domain (used for the prod `api-gateway` and ArgoCD ALB Ingresses). Request one with `aws acm request-certificate` and validate via a DNS CNAME record at your DNS provider |
+| `ALERTMANAGER_SLACK_WEBHOOK_URL` | Slack incoming webhook URL for AlertManager notifications. Optional — leave the secret unset/empty to fall back to a null receiver (no Slack alerts) |
 
 ---
 
@@ -244,7 +251,9 @@ Leaving `confirm_destroy` blank, or entering anything that doesn't exactly match
 
 ## Accessing services
 
-All public-facing services use NodePort. Get any node's public IP with:
+Dev and prod use different access patterns: dev exposes everything via NodePort on the node's public IP (IGW-based, no load balancer); prod fronts `api-gateway` and ArgoCD with an internet-facing ALB over HTTPS, and keeps Grafana/Zipkin internal-only (`ClusterIP`, port-forward).
+
+For NodePort access, get any node's public IP with:
 
 ```bash
 aws eks update-kubeconfig --name petclinic-dev --region us-east-1   # or petclinic-prod
@@ -256,12 +265,35 @@ Run `aws eks update-kubeconfig` any time `kubectl` reports a DNS resolution erro
 
 This requires your IAM identity to have an EKS access entry — see `extra_cluster_admin_arns` in [Step 3](#step-3--configure-terraformtfvars). Without it, `kubectl` commands fail with `Unauthorized`.
 
+### Dev — NodePort
+
 | Service | NodePort | URL |
 |---|---|---|
 | PetClinic app (api-gateway) | 30080 | `http://<node-ip>:30080` |
 | ArgoCD UI | 30880 | `http://<node-ip>:30880` |
-| Grafana (dev only) | 30300 | `http://<node-ip>:30300` |
-| Zipkin (dev only) | 30411 | `http://<node-ip>:30411` |
+| Grafana | 30300 | `http://<node-ip>:30300` |
+| Zipkin | 30411 | `http://<node-ip>:30411` |
+
+### Prod — ALB (HTTPS) for api-gateway, Grafana, and ArgoCD
+
+`api-gateway` and Grafana share **one** internet-facing ALB via an AWS Load Balancer Controller `IngressGroup` (`alb.ingress.kubernetes.io/group.name: petclinic-prod` on both Ingresses), routed by hostname. ArgoCD gets its **own dedicated** ALB. All three are TLS-terminated with the certificate in `ACM_CERT_ARN`.
+
+Get each ALB's hostname:
+
+```bash
+kubectl -n petclinic-prod get ingress api-gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+kubectl -n monitoring get ingress grafana -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'   # same hostname as api-gateway's — shared ALB
+kubectl -n argocd get ingress argocd-server -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+```
+
+Point a DNS record at each hostname (a CNAME, set to DNS-only/not proxied if your DNS provider offers a proxy mode like Cloudflare's — the ALB itself terminates TLS, so proxying would double up or break validation). ArgoCD's Ingress sets no `host` rule, so its dedicated ALB accepts any hostname routed to it; `api-gateway` and `grafana` each require an exact `host` match (`petclinic.berryexcel.online` / `grafana.berryexcel.online`) since they share one ALB and are disambiguated by hostname.
+
+| Service | Access |
+|---|---|
+| PetClinic app (api-gateway) | `https://petclinic.<your-domain>` → shared ALB → `api-gateway` Service (`ClusterIP`, ALB targets pods directly in IP mode) |
+| Grafana | `https://grafana.<your-domain>` → same shared ALB → `kube-prometheus-stack-grafana` Service (`ClusterIP`) |
+| ArgoCD UI | `https://<argocd-subdomain>` → dedicated ALB → `argocd-server` Service (`ClusterIP`) |
+| Zipkin | `ClusterIP` only — `kubectl port-forward -n petclinic-prod svc/zipkin 9411:9411` |
 
 ---
 
@@ -275,7 +307,7 @@ Pre-loaded dashboards under the **PetClinic** folder:
 - **JVM Micrometer** — heap, GC, threads per pod
 - **Spring Boot Statistics** — request rate, latency, error rate per service
 
-Prod Grafana uses `ClusterIP` — access via port-forward:
+Prod Grafana is reachable at `https://grafana.<your-domain>` (see [Accessing services](#accessing-services) above) — its Service stays `ClusterIP`, fronted by an ALB Ingress sharing the api-gateway ALB. If you need direct access bypassing DNS/ALB, port-forward still works:
 
 ```bash
 kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3000:80

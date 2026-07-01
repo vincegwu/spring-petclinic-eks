@@ -1,16 +1,16 @@
-global:
-  domain: ""  # Set to your domain if using ingress
-
 server:
+  # ClusterIP — an ALB Ingress (provisioned by Terraform via the AWS Load
+  # Balancer Controller) is the external HTTPS endpoint. NodePort is not used.
   service:
-    type: NodePort
-    nodePortHttp: 30880
+    type: ClusterIP
 
 configs:
   params:
-    server.insecure: true  # Access is HTTP-only via node public IP on port 30880
+    # TLS is terminated at the ALB; ArgoCD serves HTTP internally.
+    server.insecure: true
 
   cm:
+    resource.compareoptions: "ignoreResourceStatusField: all"
     # Allow ArgoCD to manage resources in all namespaces
     application.resourceTrackingMethod: annotation
     resource.customizations.health.external-secrets.io_ExternalSecret: |
