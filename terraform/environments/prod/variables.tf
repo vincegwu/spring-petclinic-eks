@@ -72,3 +72,15 @@ variable "grafana_admin_password" {
   type        = string
   sensitive   = true
 }
+
+variable "acm_certificate_arn" {
+  description = "ACM certificate ARN for HTTPS on the ALB (must cover the domain used for ArgoCD and api-gateway). Passed via TF_VAR_acm_certificate_arn in CI."
+  type        = string
+}
+
+variable "alertmanager_slack_webhook_url" {
+  description = "Slack incoming webhook URL for Alertmanager notifications. Leave empty to use the null receiver. Passed via TF_VAR_alertmanager_slack_webhook_url in CI."
+  type        = string
+  sensitive   = true
+  default     = ""
+}

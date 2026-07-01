@@ -18,6 +18,21 @@ locals {
     ManagedBy   = "terraform"
   }
 
+  alertmanager_receivers = var.alertmanager_slack_webhook_url != "" ? [
+    {
+      name = "slack-notifications"
+      slack_configs = [{
+        api_url       = var.alertmanager_slack_webhook_url
+        channel       = "#alerts"
+        send_resolved = true
+        title         = "[{{ .Status | toUpper }}{{ if eq .Status \"firing\" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}"
+        text          = "{{ range .Alerts }}*Alert:* {{ .Annotations.summary }}\n*Description:* {{ .Annotations.description }}\n*Severity:* {{ .Labels.severity }}\n{{ end }}"
+      }]
+    }
+  ] : [{ name = "null" }]
+
+  alertmanager_route_receiver = var.alertmanager_slack_webhook_url != "" ? "slack-notifications" : "null"
+
   # EKS access entries require the underlying IAM role ARN, not the STS
   # assumed-role session ARN that aws_caller_identity returns when Terraform
   # is running as an assumed role (e.g. via GitHub Actions OIDC).
@@ -98,7 +113,10 @@ module "eks" {
   node_max_size      = var.node_max_size
   node_desired_size  = var.node_desired_size
   cluster_admin_arns = distinct(concat([local.caller_admin_arn, data.aws_iam_role.github_actions.arn], var.extra_cluster_admin_arns))
-  tags               = local.tags
+  # ALB (AWS LBC) reaches pods via IP mode — NodePort internet exposure removed
+  vpc_cidr                       = var.vpc_cidr
+  allow_internet_nodeport_access = false
+  tags                           = local.tags
 }
 
 # ── RDS — one instance per data service ──────────────────────────────────────
@@ -297,6 +315,45 @@ resource "helm_release" "cluster_autoscaler" {
   depends_on = [module.eks]
 }
 
+# ── AWS Load Balancer Controller ─────────────────────────────────────────────
+# Provisions internet-facing ALBs for api-gateway and ArgoCD via Ingress resources.
+# Uses IRSA (no long-lived credentials) and IP-mode target groups so traffic
+# never traverses NodePort — the NodePort 30000-32767 SG rule is disabled in prod.
+resource "helm_release" "aws_load_balancer_controller" {
+  name       = "aws-load-balancer-controller"
+  repository = "https://aws.github.io/eks-charts"
+  chart      = "aws-load-balancer-controller"
+  version    = "1.12.0"
+  namespace  = "kube-system"
+
+  set {
+    name  = "clusterName"
+    value = var.cluster_name
+  }
+  set {
+    name  = "serviceAccount.create"
+    value = "true"
+  }
+  set {
+    name  = "serviceAccount.name"
+    value = "aws-load-balancer-controller"
+  }
+  set {
+    name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
+    value = module.eks.lbc_role_arn
+  }
+  set {
+    name  = "region"
+    value = var.aws_region
+  }
+  set {
+    name  = "vpcId"
+    value = module.vpc.vpc_id
+  }
+
+  depends_on = [module.eks]
+}
+
 # ── External Secrets Operator ─────────────────────────────────────────────────
 resource "helm_release" "external_secrets" {
   name             = "external-secrets"
@@ -404,6 +461,17 @@ resource "helm_release" "kube_prometheus_stack" {
             }
           }
         }
+        config = {
+          global = { resolve_timeout = "5m" }
+          route = {
+            group_by        = ["alertname", "job", "severity"]
+            group_wait      = "30s"
+            group_interval  = "5m"
+            repeat_interval = "12h"
+            receiver        = local.alertmanager_route_receiver
+          }
+          receivers = local.alertmanager_receivers
+        }
       }
     })
   ]
@@ -452,19 +520,18 @@ resource "helm_release" "argocd" {
   values = [
     yamlencode({
       server = {
+        # ClusterIP — the ALB Ingress below provides the external HTTPS endpoint.
+        # The NodePort 30880 is removed; access is now HTTPS-only via ALB.
         service = {
-          type         = "NodePort"
-          nodePortHttp = 30880
+          type = "ClusterIP"
         }
       }
       configs = {
         params = {
+          # TLS is terminated at the ALB; ArgoCD serves HTTP internally.
           "server.insecure" = true
         }
         cm = {
-          # Prevents schema validation errors on K8s 1.35 fields not yet in
-          # older ArgoCD bundled schemas (e.g. .status.terminatingReplicas).
-          # Safe to remove once ArgoCD natively bundles the K8s 1.35 schema.
           "resource.compareoptions" = "ignoreResourceStatusField: all"
         }
       }
@@ -472,6 +539,48 @@ resource "helm_release" "argocd" {
   ]
 
   depends_on = [module.eks]
+}
+
+# ArgoCD is exposed via an internet-facing ALB with HTTPS termination at the edge.
+# TLS is handled by ACM; internal traffic from ALB to ArgoCD pods is plain HTTP
+# (acceptable because it is VPC-internal and ArgoCD cannot distinguish the two).
+resource "kubectl_manifest" "argocd_ingress" {
+  yaml_body = yamlencode({
+    apiVersion = "networking.k8s.io/v1"
+    kind       = "Ingress"
+    metadata = {
+      name      = "argocd-server"
+      namespace = "argocd"
+      annotations = {
+        "alb.ingress.kubernetes.io/scheme"           = "internet-facing"
+        "alb.ingress.kubernetes.io/target-type"      = "ip"
+        "alb.ingress.kubernetes.io/listen-ports"     = "[{\"HTTPS\":443}]"
+        "alb.ingress.kubernetes.io/certificate-arn"  = var.acm_certificate_arn
+        "alb.ingress.kubernetes.io/backend-protocol" = "HTTP"
+        "alb.ingress.kubernetes.io/healthcheck-path" = "/healthz"
+        "alb.ingress.kubernetes.io/ssl-policy"       = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+      }
+    }
+    spec = {
+      ingressClassName = "alb"
+      rules = [{
+        http = {
+          paths = [{
+            path     = "/"
+            pathType = "Prefix"
+            backend = {
+              service = {
+                name = "argocd-server"
+                port = { number = 80 }
+              }
+            }
+          }]
+        }
+      }]
+    }
+  })
+
+  depends_on = [helm_release.argocd, helm_release.aws_load_balancer_controller]
 }
 
 resource "kubernetes_secret" "argocd_repo_creds" {

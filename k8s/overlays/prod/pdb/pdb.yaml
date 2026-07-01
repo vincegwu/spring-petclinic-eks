@@ -1,0 +1,79 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api-gateway
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: api-gateway
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: config-server
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: config-server
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: discovery-server
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: discovery-server
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: admin-server
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: admin-server
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: customers-service
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: customers-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: vets-service
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: vets-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: visits-service
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: visits-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: genai-service
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: genai-service

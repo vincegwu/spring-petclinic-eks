@@ -21,8 +21,20 @@ variable "private_subnet_ids" {
 }
 
 variable "public_subnet_ids" {
-  description = "Public subnet IDs — node group is placed here so pods are reachable via IGW on NodePort without a load balancer"
+  description = "Public subnet IDs — node group is placed here so pods are reachable via the ALB (or via IGW NodePort in dev)"
   type        = list(string)
+}
+
+variable "vpc_cidr" {
+  description = "VPC CIDR block — when set, allows the ALB to reach pod ports via IP-mode target groups"
+  type        = string
+  default     = ""
+}
+
+variable "allow_internet_nodeport_access" {
+  description = "Open NodePort range 30000-32767 to 0.0.0.0/0. Set false in prod when using AWS LBC with an ALB."
+  type        = bool
+  default     = true
 }
 
 variable "node_instance_type" {

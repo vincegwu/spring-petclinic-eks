@@ -11,6 +11,9 @@ resources:
 - external-secrets/visits-service.yaml
 - external-secrets/genai-service.yaml
 - hpa/hpa.yaml
+- ingress/api-gateway.yaml
+- networkpolicies/network-policies.yaml
+- pdb/pdb.yaml
 
 patches:
 - path: patches/replicas.yaml
@@ -31,6 +34,10 @@ patches:
   target:
     kind: Deployment
     name: config-server
+- path: patches/api-gateway-service.yaml
+  target:
+    kind: Service
+    name: api-gateway
 
 # Image tags are updated automatically by the CI workflow (replaced with prod-<git-sha>).
 # PLACEHOLDER-update-via-ci tags must never be deployed; CI overwrites them on every push.

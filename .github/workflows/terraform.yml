@@ -109,6 +109,8 @@ jobs:
           TF_VAR_github_token: ${{ secrets.GH_PAT }}
           TF_VAR_github_repo_url: https://github.com/${{ github.repository }}.git
           TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          TF_VAR_acm_certificate_arn: ${{ secrets.ACM_CERT_ARN }}
+          TF_VAR_alertmanager_slack_webhook_url: ${{ secrets.ALERTMANAGER_SLACK_WEBHOOK_URL }}
         run: |
           # Target the same AWS resources as Stage 1 apply so that planning
           # succeeds even before the EKS cluster exists (Kubernetes/Helm
@@ -156,6 +158,8 @@ jobs:
           TF_VAR_github_token: ${{ secrets.GH_PAT }}
           TF_VAR_github_repo_url: https://github.com/${{ github.repository }}.git
           TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          TF_VAR_acm_certificate_arn: ${{ secrets.ACM_CERT_ARN }}
+          TF_VAR_alertmanager_slack_webhook_url: ${{ secrets.ALERTMANAGER_SLACK_WEBHOOK_URL }}
         run: |
           terraform apply \
             -target=module.vpc \
@@ -169,7 +173,7 @@ jobs:
             -target=aws_secretsmanager_secret_version.azure_openai \
             -input=false -auto-approve
 
-      # Stage 2: Helm charts (ESO, ArgoCD) and Kubernetes manifests.
+      # Stage 2: Helm charts (ESO, LBC, ArgoCD) and Kubernetes manifests.
       # The cluster is guaranteed to exist at this point.
       - name: Terraform Apply — Stage 2 (Helm add-ons + ArgoCD application)
         if: github.event_name != 'pull_request'
@@ -180,4 +184,6 @@ jobs:
           TF_VAR_github_token: ${{ secrets.GH_PAT }}
           TF_VAR_github_repo_url: https://github.com/${{ github.repository }}.git
           TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          TF_VAR_acm_certificate_arn: ${{ secrets.ACM_CERT_ARN }}
+          TF_VAR_alertmanager_slack_webhook_url: ${{ secrets.ALERTMANAGER_SLACK_WEBHOOK_URL }}
         run: terraform apply -input=false -auto-approve

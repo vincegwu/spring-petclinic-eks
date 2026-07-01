@@ -142,12 +142,26 @@ resource "aws_security_group" "nodes" {
     security_groups = [aws_security_group.cluster.id]
   }
 
-  ingress {
-    description = "NodePort services - internet traffic via IGW"
-    from_port   = 30000
-    to_port     = 32767
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+  dynamic "ingress" {
+    for_each = var.allow_internet_nodeport_access ? [1] : []
+    content {
+      description = "NodePort services - internet traffic via IGW"
+      from_port   = 30000
+      to_port     = 32767
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+  }
+
+  dynamic "ingress" {
+    for_each = var.vpc_cidr != "" ? [1] : []
+    content {
+      description = "ALB to pod ports (IP-mode target groups) — VPC-internal only"
+      from_port   = 8080
+      to_port     = 9090
+      protocol    = "tcp"
+      cidr_blocks = [var.vpc_cidr]
+    }
   }
 
   egress {
@@ -497,4 +511,43 @@ resource "aws_eks_access_policy_association" "admin" {
   }
 
   depends_on = [aws_eks_access_entry.admin]
+}
+
+# ── IRSA: AWS Load Balancer Controller ──────────────────────────────────────
+data "aws_iam_policy_document" "lbc_assume" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    effect  = "Allow"
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.this.arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_iam_openid_connect_provider.this.url, "https://", "")}:sub"
+      values   = ["system:serviceaccount:kube-system:aws-load-balancer-controller"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_iam_openid_connect_provider.this.url, "https://", "")}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "lbc" {
+  name               = "${var.cluster_name}-lbc-role"
+  assume_role_policy = data.aws_iam_policy_document.lbc_assume.json
+  tags               = var.tags
+}
+
+resource "aws_iam_policy" "lbc" {
+  name   = "${var.cluster_name}-lbc-policy"
+  policy = file("${path.module}/policies/lbc-policy.json")
+  tags   = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "lbc" {
+  role       = aws_iam_role.lbc.name
+  policy_arn = aws_iam_policy.lbc.arn
 }
