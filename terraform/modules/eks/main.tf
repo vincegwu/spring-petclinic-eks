@@ -156,7 +156,7 @@ resource "aws_security_group" "nodes" {
   dynamic "ingress" {
     for_each = var.vpc_cidr != "" ? [1] : []
     content {
-      description = "ALB to pod ports (IP-mode target groups) — VPC-internal only"
+      description = "ALB to pod ports (IP-mode target groups) - VPC-internal only"
       from_port   = 8080
       to_port     = 9090
       protocol    = "tcp"
