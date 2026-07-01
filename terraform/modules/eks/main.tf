@@ -164,6 +164,17 @@ resource "aws_security_group" "nodes" {
     }
   }
 
+  dynamic "ingress" {
+    for_each = var.vpc_cidr != "" ? [1] : []
+    content {
+      description = "ALB to Grafana pod port (IP-mode target group) - VPC-internal only"
+      from_port   = 3000
+      to_port     = 3000
+      protocol    = "tcp"
+      cidr_blocks = [var.vpc_cidr]
+    }
+  }
+
   egress {
     description = "Node-to-node and pod-to-pod communication"
     from_port   = 0
@@ -188,7 +199,14 @@ resource "aws_security_group" "nodes" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = merge(var.tags, { Name = "${var.cluster_name}-nodes-sg" })
+  # kubernetes.io/cluster/<name> = owned is required by the AWS Load Balancer Controller
+  # to identify this as the single node security group for its backend-security-group
+  # automation; without it, ReconcileForPodEndpoints errors on every TargetGroupBinding
+  # ("expected exactly one securityGroup tagged ... got: []") and endlessly requeues.
+  tags = merge(var.tags, {
+    Name                                        = "${var.cluster_name}-nodes-sg"
+    "kubernetes.io/cluster/${var.cluster_name}" = "owned"
+  })
 }
 
 # ── EKS Cluster ──────────────────────────────────────────────────────────────
