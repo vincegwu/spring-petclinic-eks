@@ -479,6 +479,50 @@ resource "helm_release" "kube_prometheus_stack" {
   depends_on = [module.eks, kubernetes_storage_class.gp3]
 }
 
+# Grafana shares the api-gateway ALB via an IngressGroup (group.name must match the
+# annotation on k8s/overlays/prod/ingress/api-gateway.yaml exactly) and is routed by
+# hostname rather than getting its own ALB.
+resource "kubectl_manifest" "grafana_ingress" {
+  yaml_body = yamlencode({
+    apiVersion = "networking.k8s.io/v1"
+    kind       = "Ingress"
+    metadata = {
+      name      = "grafana"
+      namespace = "monitoring"
+      annotations = {
+        "alb.ingress.kubernetes.io/scheme"           = "internet-facing"
+        "alb.ingress.kubernetes.io/target-type"      = "ip"
+        "alb.ingress.kubernetes.io/listen-ports"     = "[{\"HTTP\":80},{\"HTTPS\":443}]"
+        "alb.ingress.kubernetes.io/ssl-redirect"     = "443"
+        "alb.ingress.kubernetes.io/certificate-arn"  = var.acm_certificate_arn
+        "alb.ingress.kubernetes.io/ssl-policy"       = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+        "alb.ingress.kubernetes.io/healthcheck-path" = "/api/health"
+        "alb.ingress.kubernetes.io/group.name"       = "petclinic-prod"
+      }
+    }
+    spec = {
+      ingressClassName = "alb"
+      rules = [{
+        host = "grafana.berryexcel.online"
+        http = {
+          paths = [{
+            path     = "/"
+            pathType = "Prefix"
+            backend = {
+              service = {
+                name = "kube-prometheus-stack-grafana"
+                port = { number = 80 }
+              }
+            }
+          }]
+        }
+      }]
+    }
+  })
+
+  depends_on = [helm_release.kube_prometheus_stack, helm_release.aws_load_balancer_controller]
+}
+
 resource "kubectl_manifest" "cluster_secret_store" {
   yaml_body = yamlencode({
     apiVersion = "external-secrets.io/v1beta1"
