@@ -55,6 +55,66 @@ jobs:
         working-directory: terraform/environments/${{ inputs.environment }}
         run: terraform init -input=false
 
+      - name: Delete load balancers and security groups created by in-cluster controllers
+        run: |
+          CLUSTER_NAME="petclinic-${{ inputs.environment }}"
+
+          # ALBs/NLBs and their security groups (one shared "backend traffic" SG plus one
+          # per ALB) are provisioned by the AWS Load Balancer Controller via k8s Ingress/Service
+          # resources (api-gateway, Grafana, ArgoCD) and are never in Terraform state — only the
+          # controller's IRSA role/policy are. If left alive, they block subnet, Internet Gateway,
+          # and ultimately VPC deletion indefinitely, hanging "terraform destroy" on module.vpc.
+          LB_ARNS=$(aws resourcegroupstaggingapi get-resources \
+            --resource-type-filters elasticloadbalancing:loadbalancer \
+            --tag-filters "Key=elbv2.k8s.aws/cluster,Values=${CLUSTER_NAME}" \
+            --query "ResourceTagMappingList[*].ResourceARN" \
+            --output text)
+
+          VPC_ID=$(aws ec2 describe-vpcs \
+            --filters "Name=tag:Name,Values=${CLUSTER_NAME}-vpc" \
+            --query "Vpcs[0].VpcId" \
+            --output text)
+
+          if [[ -z "$LB_ARNS" ]]; then
+            echo "No load balancers tagged for ${CLUSTER_NAME}."
+          else
+            for ARN in $LB_ARNS; do
+              echo "Deleting load balancer: $ARN"
+              aws elbv2 delete-load-balancer --load-balancer-arn "$ARN" || true
+            done
+
+            echo "Waiting for load balancer ENIs to release in ${VPC_ID}..."
+            for i in $(seq 1 30); do
+              REMAINING=$(aws ec2 describe-network-interfaces \
+                --filters "Name=vpc-id,Values=${VPC_ID}" "Name=description,Values=ELB app/*" \
+                --query "NetworkInterfaces[*].NetworkInterfaceId" \
+                --output text)
+              if [[ -z "$REMAINING" ]]; then
+                echo "All load balancer ENIs released."
+                break
+              fi
+              echo "Still waiting on ENIs: $REMAINING"
+              sleep 10
+            done
+          fi
+
+          # Runs regardless of whether any load balancers were found above — on a re-run
+          # after the LBs are already gone, their security groups can still be left behind.
+          SG_IDS=$(aws resourcegroupstaggingapi get-resources \
+            --resource-type-filters ec2:security-group \
+            --tag-filters "Key=elbv2.k8s.aws/cluster,Values=${CLUSTER_NAME}" \
+            --query "ResourceTagMappingList[*].ResourceARN" \
+            --output text | sed 's#.*/##')
+
+          if [[ -z "$SG_IDS" ]]; then
+            echo "No load-balancer-controller security groups tagged for ${CLUSTER_NAME}."
+          else
+            for SG_ID in $SG_IDS; do
+              echo "Deleting security group: $SG_ID"
+              aws ec2 delete-security-group --group-id "$SG_ID" || true
+            done
+          fi
+
       - name: Clean up orphaned VPC ENIs
         run: |
           CLUSTER_NAME="petclinic-${{ inputs.environment }}"
